@@ -46,6 +46,9 @@ from autoCreation.icon_creator_backend import router as icon_creator_router
 # ✅ Excel Importer — place excel_importer.py inside backend/services/
 from services.excel_importer import router as excel_router
 
+# 🔥 FIX: Import the lazy engine initializer from ocr_routers
+from ocr_routers import initialize_ocr_engines
+
 # Create tables (this will now include UOM, Category, Product Classification, Finance & Sonata Custom Fields tables)
 Base.metadata.create_all(bind=engine)
 
@@ -88,6 +91,20 @@ app.include_router(icon_creator_router, tags=["🎨 Icon Creator System"])
 
 # ✅ Excel Importer — POST /api/excel/parse  POST /api/excel/sheet
 app.include_router(excel_router, tags=["📊 Excel / CSV Importer"])
+
+
+# ===========================================================
+# 🔥 FIX: Startup event — runs AFTER port is open on Render
+#         Heavy OCR models (EasyOCR, PaddleOCR) load here,
+#         so the port is already bound and Render won't timeout.
+#         Zero functionality change — everything works the same.
+# ===========================================================
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 App started — port is open — now loading OCR engines...")
+    initialize_ocr_engines()
+    print("✅ Startup complete")
+
 
 @app.get("/")
 def read_root():
@@ -133,4 +150,4 @@ def health_check():
         }
     }
 
-    #   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+#   uvicorn main:app --host 0.0.0.0 --port $PORT
