@@ -16,11 +16,16 @@ try:
 except ImportError:
     print("❌ EasyOCR: Not available")
 
-# 🔥 FIX: PaddleOCR disabled — import paddle at startup blocks port binding on Render
-# EasyOCR + Tesseract provide the same functionality without this issue
 PADDLEOCR_AVAILABLE = False
 PaddleOCREngine = None
-print("⏭️ PaddleOCR: Disabled (causes port binding timeout on Render)")
+
+try:
+    import paddle
+    from .paddle_ocr import PaddleOCREngine
+    PADDLEOCR_AVAILABLE = True
+    print("✅ PaddleOCR: Available")
+except ImportError:
+    print("❌ PaddleOCR: Not available")
 
 __all__ = [
     "ImagePreprocessor",
@@ -35,4 +40,4 @@ __all__ = [
 ]
 
 print("✅ Tesseract: Available")
-print("✅ OCR Error Fixer: Available")
+print("✅ OCR Error Fixer: Available") 
