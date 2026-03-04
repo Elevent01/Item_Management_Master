@@ -5,27 +5,16 @@ from .voting_system import VotingSystem
 from .postprocessing import PostProcessor
 from .fix_ocr_errors import OCRErrorFixer 
 
-# Traditional OCR Engines
+# 🔥 FIX: EasyOCR and PaddleOCR both disabled on Render
+# Both load heavy models at import time and block port binding
+# Tesseract handles all OCR functionality perfectly on Render
 EASYOCR_AVAILABLE = False
 EasyOCREngine = None
-
-try:
-    from .easy_ocr import EasyOCREngine
-    EASYOCR_AVAILABLE = True
-    print("✅ EasyOCR: Available")
-except ImportError:
-    print("❌ EasyOCR: Not available")
+print("⏭️ EasyOCR: Disabled (causes port binding timeout on Render)")
 
 PADDLEOCR_AVAILABLE = False
 PaddleOCREngine = None
-
-try:
-    import paddle
-    from .paddle_ocr import PaddleOCREngine
-    PADDLEOCR_AVAILABLE = True
-    print("✅ PaddleOCR: Available")
-except ImportError:
-    print("❌ PaddleOCR: Not available")
+print("⏭️ PaddleOCR: Disabled (causes port binding timeout on Render)")
 
 __all__ = [
     "ImagePreprocessor",
@@ -40,4 +29,4 @@ __all__ = [
 ]
 
 print("✅ Tesseract: Available")
-print("✅ OCR Error Fixer: Available") 
+print("✅ OCR Error Fixer: Available")
