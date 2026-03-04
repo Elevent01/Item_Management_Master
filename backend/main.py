@@ -19,34 +19,34 @@ from role.role_sync import router as sync_router
 
 # ✅ Import UOM System
 from uomSystem.uom_routes import router as uom_router
-from uomSystem import uom_models   # IMPORTANT: auto table creation
+from uomSystem import uom_models
 
 # ✅ Import Category System
 from category.category_routes import router as category_router
-from category import category_models   # IMPORTANT: auto table creation
+from category import category_models
 
 # ✅ Import Product Classification System  
 from productClassification.product_routers import router as product_router
-from productClassification import product_models   # IMPORTANT: auto table creation
+from productClassification import product_models
 
 # ✅ Import Finance & Accounting System  
 from financeAccounting.finance_routes import router as finance_router
-from financeAccounting import finance_models   # IMPORTANT: auto table creation
+from financeAccounting import finance_models
 
 # ✅ Import Sonata Custom Fields System
 from sonataCustomFields.sonata_custom_router import router as sonata_custom_router
-from sonataCustomFields import sonata_custom_models   # IMPORTANT: auto table creation
+from sonataCustomFields import sonata_custom_models
 
-# 🚀 Import Page Creation System (No Database Required)
+# 🚀 Import Page Creation System
 from autoCreation.page_creation_routes import router as page_creation_router
 from autoCreation.page_links_routes import router as page_links_router
 from autoCreation.config_file_routes import router as config_file_router
 from autoCreation.icon_creator_backend import router as icon_creator_router
 
-# ✅ Excel Importer — place excel_importer.py inside backend/services/
+# ✅ Excel Importer
 from services.excel_importer import router as excel_router
 
-# Create tables (this will now include UOM, Category, Product Classification, Finance & Sonata Custom Fields tables)
+# Create tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -85,9 +85,8 @@ app.include_router(page_creation_router, prefix="/api/pages", tags=["🚀 Page C
 app.include_router(page_links_router, prefix="/api/links", tags=["🔗 Page Links Management"])
 app.include_router(config_file_router, prefix="/api/configs", tags=["⚙️ Config File Management"])
 app.include_router(icon_creator_router, tags=["🎨 Icon Creator System"])
-
-# ✅ Excel Importer — POST /api/excel/parse  POST /api/excel/sheet
 app.include_router(excel_router, tags=["📊 Excel / CSV Importer"])
+
 
 @app.get("/")
 def read_root():
@@ -113,6 +112,7 @@ def read_root():
         "docs": "http://localhost:8000/docs"
     }
 
+
 @app.get("/health")
 def health_check():
     return {
@@ -133,4 +133,4 @@ def health_check():
         }
     }
 
-    #   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+#   uvicorn main:app --host 0.0.0.0 --port $PORT
