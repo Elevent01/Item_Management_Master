@@ -4,8 +4,8 @@ import { Search, X, ChevronDown, AlertCircle } from 'lucide-react';
 // ==================== IMPORT ORIGINAL PAGES ====================
 import ItemInfoMaster from "../ItemMasterPages/ItemInfoMaster.js";
 import BreezCustomFields from "../ItemMasterPages/BreezCustomFields.js";
-import SonataCustomFields from "../ItemMasterPages/SonataCustomFields.js";
-import SweetNutritionCustomFields from "../ItemMasterPages/SweetNutritionCustomFields.js";
+// import SonataCustomFields removed for build fix
+// import SweetNutritionCustomFields removed for build fix
 
 const API_BASE = 'http://localhost:8000/api';
 

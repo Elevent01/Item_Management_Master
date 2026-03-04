@@ -2,22 +2,22 @@
 import { Candy, Info, Music, Package, PlusCircle, Wind, Warehouse, FileBox, DollarSign, TrendingUp, ShoppingCart, Building2 } from "lucide-react";
 
 // Import the components
-import ItemInfoMaster from "../itemMasterPages/ItemInfoMaster.js";
-import BreezCustomFields from "../itemMasterPages/BreezCustomFields.js";
-import SonataCustomFields from "../itemMasterPages/SonataCustomFields.js";
+import ItemInfoMaster from "../ItemMasterPages/ItemInfoMaster.js";
+import BreezCustomFields from "../ItemMasterPages/BreezCustomFields.js";
+import SonataCustomFields from "../ItemMasterPages/SonataCustomFields.js";
 import SonataItemCapacityPage from "../SonataCustomFields/SonataItemCapacityPage.js";
 import SonataItemGradePage from "../SonataCustomFields/SonataItemGradePage.js";
-import SweetNutritionCustomFields from "../itemMasterPages/SweetNutritionCustomFields.js";
-import CreateItemMaster from "../itemMasterPages/CreateItemMaster.js";
-import InfoMaster from "../itemMasterPages/InfoMaster.js";
-import ItemMasterInventory from "../itemMasterPages/ItemMasterInventory.js";
-import RenderItemMasterInventory from "../itemMasterPages/RenderItemMasterInventory.js";
-import ItemMasterSalesDetail from "../itemMasterPages/ItemMasterSalesDetail.js";
-import ItemMasterFinanceDetails from "../itemMasterPages/ItemMasterFinanceDetails.js";
-import RenderItemMasterSalesAndFinance from "../itemMasterPages/RenderItemMasterSalesAndFinance.js";
-import ItemMasterWarehouseDetails from "../itemMasterPages/ItemMasterWarehouseDetails.js";
-import ItemMasterPurchaseDetails from "../itemMasterPages/ItemMasterPurchaseDetails.js";
-import RenderItemMasterWarehouseAndPurchase from "../itemMasterPages/RenderItemMasterWarehouseAndPurchase.js";
+import SweetNutritionCustomFields from "../ItemMasterPages/SweetNutritionCustomFields.js";
+import CreateItemMaster from "../ItemMasterPages/CreateItemMaster.js";
+import InfoMaster from "../ItemMasterPages/InfoMaster.js";
+import ItemMasterInventory from "../ItemMasterPages/ItemMasterInventory.js";
+import RenderItemMasterInventory from "../ItemMasterPages/RenderItemMasterInventory.js";
+import ItemMasterSalesDetail from "../ItemMasterPages/ItemMasterSalesDetail.js";
+import ItemMasterFinanceDetails from "../ItemMasterPages/ItemMasterFinanceDetails.js";
+import RenderItemMasterSalesAndFinance from "../ItemMasterPages/RenderItemMasterSalesAndFinance.js";
+import ItemMasterWarehouseDetails from "../ItemMasterPages/ItemMasterWarehouseDetails.js";
+import ItemMasterPurchaseDetails from "../ItemMasterPages/ItemMasterPurchaseDetails.js";
+import RenderItemMasterWarehouseAndPurchase from "../ItemMasterPages/RenderItemMasterWarehouseAndPurchase.js";
 
 export const itemMasterLinks = [
   { 

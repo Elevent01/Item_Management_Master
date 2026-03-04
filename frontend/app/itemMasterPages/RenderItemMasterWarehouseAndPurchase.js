@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
-import ItemMasterWarehouseDetails from "../itemMasterPages/ItemMasterWarehouseDetails.js";
-import ItemMasterPurchaseDetails from "../itemMasterPages/ItemMasterPurchaseDetails.js";
+import ItemMasterWarehouseDetails from "../ItemMasterPages/ItemMasterWarehouseDetails.js";
+import ItemMasterPurchaseDetails from "../ItemMasterPages/ItemMasterPurchaseDetails.js";
 
 const API_BASE = 'http://localhost:8000/api';
 
