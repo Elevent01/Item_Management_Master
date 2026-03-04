@@ -33,7 +33,7 @@ anthropic==0.39.0
 # =========================
 pytesseract==0.3.10
 easyocr==1.7.1
-paddleocr==2.7.0.3
+paddleocr==2.9.1
 
 # =========================
 # PaddleOCR Dependencies
