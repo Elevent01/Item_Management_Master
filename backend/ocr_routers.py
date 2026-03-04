@@ -30,34 +30,56 @@ from typing import List, Optional
 
 router = APIRouter()
 
-# Initialize engines
+# ============================================================
+# 🔥 FIX: All engines start as None — initialized lazily
+#         after the port is open (called from main.py startup)
+# ============================================================
 preprocessor = ImagePreprocessor()
 tesseract = TesseractOCR()
 voting_system = VotingSystem()
 postprocessor = PostProcessor()
 bol_extractor = BillOfLadingExtractor()
 
-# Traditional OCR engines
 easyocr_engine = None
 paddleocr_engine = None
 advanced_preprocessor = AdvancedPreprocessor()
 intelligent_bol_extractor = IntelligentBOLExtractor()
 
-if EASYOCR_AVAILABLE:
-    try:
-        easyocr_engine = EasyOCREngine()
-        print("✅ EasyOCR engine initialized")
-    except Exception as e:
-        print(f"⚠️ EasyOCR init failed: {e}")
-        EASYOCR_AVAILABLE = False
+_engines_initialized = False
 
-if PADDLEOCR_AVAILABLE:
-    try:
-        paddleocr_engine = PaddleOCREngine()
-        print("✅ PaddleOCR engine initialized")
-    except Exception as e:
-        print(f"⚠️ PaddleOCR init failed: {e}")
-        PADDLEOCR_AVAILABLE = False
+
+def initialize_ocr_engines():
+    """
+    🔥 Called ONCE from main.py @app.on_event('startup').
+    Runs AFTER uvicorn has already bound the port, so Render
+    never times out waiting for the port to open.
+    All functionality is identical — only the timing changes.
+    """
+    global easyocr_engine, paddleocr_engine, _engines_initialized, EASYOCR_AVAILABLE, PADDLEOCR_AVAILABLE
+
+    if _engines_initialized:
+        return
+
+    print("\n🚀 Initializing OCR engines (post-startup)...")
+
+    if EASYOCR_AVAILABLE:
+        try:
+            easyocr_engine = EasyOCREngine()
+            print("✅ EasyOCR engine initialized")
+        except Exception as e:
+            print(f"⚠️ EasyOCR init failed: {e}")
+            EASYOCR_AVAILABLE = False
+
+    if PADDLEOCR_AVAILABLE:
+        try:
+            paddleocr_engine = PaddleOCREngine()
+            print("✅ PaddleOCR engine initialized")
+        except Exception as e:
+            print(f"⚠️ PaddleOCR init failed: {e}")
+            PADDLEOCR_AVAILABLE = False
+
+    _engines_initialized = True
+    print("✅ All OCR engines ready\n")
 
 
 @router.post("/upload", response_model=OCRDocumentResponse)
@@ -75,8 +97,6 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
         existing = db.query(OCRDocument).filter(OCRDocument.file_hash == file_hash).first()
         if existing:
             print(f"♻️ File exists: {file.filename} (ID: {existing.id})")
-            # If the stored path is from a different machine / no longer exists,
-            # save the freshly uploaded bytes and update the record.
             if not os.path.exists(existing.file_path):
                 safe_filename = f"{file_hash}_{file.filename}"
                 new_path = ImageUtils.save_temp_file(file_bytes, safe_filename)
@@ -136,24 +156,17 @@ async def process_document(
         document.status = "processing"
         db.commit()
         
-        # Resolve file path robustly.
-        # The stored absolute path may reference a different machine/user account.
-        # Strategy: if the stored path doesn't exist, rebuild it by finding
-        # the "uploads" folder relative to this file's own location.
         resolved_path = document.file_path
         if not os.path.exists(resolved_path):
-            # Derive the uploads directory relative to ocr_routers.py on this machine
             this_dir = os.path.dirname(os.path.abspath(__file__))
-            # Walk up to find an "uploads" sibling directory (handles nested layouts)
             uploads_dir = os.path.join(this_dir, "uploads")
             if not os.path.isdir(uploads_dir):
-                # Try one level up (e.g. if routers are in backend/routers/)
                 uploads_dir = os.path.join(os.path.dirname(this_dir), "uploads")
 
             fallback_path = os.path.join(uploads_dir, os.path.basename(resolved_path))
             if os.path.exists(fallback_path):
                 resolved_path = fallback_path
-                document.file_path = resolved_path   # keep DB in sync
+                document.file_path = resolved_path
                 db.commit()
                 print(f"  🔄 Resolved path to: {resolved_path}")
             else:
@@ -166,7 +179,6 @@ async def process_document(
         with open(resolved_path, "rb") as f:
             file_bytes = f.read()
 
-        # Check cache
         cache = db.query(OCRCache).filter(OCRCache.file_hash == document.file_hash).first()
         if cache:
             print(f"🚀 Cache HIT: {document.file_name}")
@@ -176,7 +188,6 @@ async def process_document(
             
             cached_data = cache.cached_result
             
-            # If BOL extraction requested and not in cache, extract now
             if extract_bol and 'bol_data' not in cached_data:
                 best_text = cached_data["best_result"]["extracted_text"]
                 bol_data = bol_extractor.extract(best_text)
@@ -203,18 +214,15 @@ async def process_document(
         
         print(f"\n🔥 Processing: {document.file_name}")
         
-        # Detect document type
         doc_type = ImageUtils.detect_document_type(file_bytes, document.file_name)
         print(f"📋 Document type: {doc_type}")
         
         ocr_results = []
-        all_ocr_results = []  # Store all engine outputs separately
+        all_ocr_results = []
         final_text = ""
         improvements = {}
         
-        # SMART ROUTING
         if doc_type == DocumentType.PDF_TEXT:
-            # Text PDF - Direct extraction
             print("📄 Text-based PDF - Using pdfplumber...")
             extracted = ImageUtils.extract_pdf_text(file_bytes)
             
@@ -235,7 +243,6 @@ async def process_document(
             improvements = {"direct_extraction": True, "tables_found": len(extracted.get("tables", []))}
             
         elif doc_type == DocumentType.EXCEL:
-            # Excel - Direct extraction
             print("📊 Excel file - Using pandas...")
             extracted = ImageUtils.extract_excel_data(file_bytes)
             
@@ -256,7 +263,6 @@ async def process_document(
             improvements = {"direct_extraction": True, "sheets_found": len(extracted.get("sheets", {}))}
             
         elif doc_type == DocumentType.CSV:
-            # CSV - Direct extraction
             print("📈 CSV file - Using pandas...")
             extracted = ImageUtils.extract_csv_data(file_bytes)
             
@@ -277,28 +283,22 @@ async def process_document(
             improvements = {"direct_extraction": True, "rows_found": len(extracted.get("data", []))}
             
         else:
-            # IMAGE or SCANNED PDF - Use Traditional OCR with ALL engines
             print("📸 Image/Scanned PDF - Using traditional OCR engines...")
             
-            # Handle multi-page PDFs
             if doc_type == DocumentType.PDF_SCANNED:
                 print("📄 Converting scanned PDF pages to images...")
-                pdf_pages = ImageUtils.pdf_to_images_all_pages(file_bytes, dpi=200)  # ✅ Lower DPI
+                pdf_pages = ImageUtils.pdf_to_images_all_pages(file_bytes, dpi=200)
                 
                 all_pages_text = []
                 
                 for page_info in pdf_pages:
                     page_num = page_info["page_num"]
-                    page_img = page_info["image"]  # ✅ Already numpy array
+                    page_img = page_info["image"]
                     
                     print(f"\n📄 Processing Page {page_num}/{len(pdf_pages)}...")
                     
-                    # ✅ NO preprocessing needed - image is already good quality
-                    # Run OCR directly on the converted image
-                    
                     page_results = []
                     
-                    # 1. Tesseract (fastest, run first)
                     print(f"  🔍 Running Tesseract on page {page_num}...")
                     try:
                         tesseract_result = tesseract.extract_text(page_img)
@@ -313,7 +313,6 @@ async def process_document(
                     except Exception as e:
                         print(f"    ❌ Tesseract failed: {e}")
                     
-                    # 2. EasyOCR (if available)
                     if easyocr_engine and EASYOCR_AVAILABLE:
                         print(f"  🔍 Running EasyOCR on page {page_num}...")
                         try:
@@ -329,7 +328,6 @@ async def process_document(
                         except Exception as e:
                             print(f"    ❌ EasyOCR failed: {e}")
                     
-                    # 3. PaddleOCR (if available)
                     if paddleocr_engine and PADDLEOCR_AVAILABLE:
                         print(f"  🔍 Running PaddleOCR on page {page_num}...")
                         try:
@@ -345,7 +343,6 @@ async def process_document(
                         except Exception as e:
                             print(f"    ❌ PaddleOCR failed: {e}")
                     
-                    # Select best for this page
                     if page_results:
                         page_best = voting_system.merge_results(page_results)
                         if page_best.get("text", "").strip():
@@ -367,10 +364,8 @@ async def process_document(
                 improvements = {"total_pages_processed": len(pdf_pages), "pages_with_text": len(all_pages_text)}
                 
             else:
-                # Single image - Run ALL OCR engines
                 preprocessed_img, _ = preprocessor.preprocess_full_pipeline(file_bytes)
                 
-                # 1. EasyOCR
                 if easyocr_engine and EASYOCR_AVAILABLE:
                     print("  🔍 Running EasyOCR...")
                     try:
@@ -387,7 +382,6 @@ async def process_document(
                     except Exception as e:
                         print(f"    ❌ EasyOCR failed: {e}")
                 
-                # 2. PaddleOCR
                 if paddleocr_engine and PADDLEOCR_AVAILABLE:
                     print("  🔍 Running PaddleOCR...")
                     try:
@@ -404,7 +398,6 @@ async def process_document(
                     except Exception as e:
                         print(f"    ❌ PaddleOCR failed: {e}")
                 
-                # 3. Tesseract
                 print("  🔍 Running Tesseract...")
                 try:
                     tesseract_result = tesseract.extract_text(preprocessed_img)
@@ -423,16 +416,13 @@ async def process_document(
                 if not ocr_results:
                     raise ValueError("All OCR engines failed to extract text")
                 
-                # Select best using voting
                 best_result = voting_system.merge_results(ocr_results)
                 
-                # Post-process
                 postprocessed = postprocessor.process_full(best_result["text"], apply_spell_check=True)
                 final_text = postprocessed["corrected"]
                 best_result["text"] = final_text
                 improvements = postprocessed.get("improvements", {})
         
-        # 🔥 BILL OF LADING EXTRACTION (if requested)
         bol_data = None
         bol_formatted = None
         
@@ -444,7 +434,6 @@ async def process_document(
         
         total_time = time.time() - start_time
         
-        # Save results
         results_to_save = []
         for ocr_result in ocr_results:
             if ocr_result.get("text", "").strip():
@@ -466,7 +455,6 @@ async def process_document(
         document.processed_at = datetime.now()
         db.commit()
         
-        # Cache
         cache_data = {
             "results": [{
                 "id": r.id,
@@ -479,7 +467,7 @@ async def process_document(
                 "word_confidences": r.word_confidences,
                 "bounding_boxes": r.bounding_boxes
             } for r in results_to_save],
-            "all_results": all_ocr_results,  # Store all engine outputs
+            "all_results": all_ocr_results,
             "best_result": {
                 "id": results_to_save[0].id if results_to_save else 0,
                 "document_id": document.id,
@@ -543,7 +531,6 @@ async def extract_bol_only(document_id: int, db: Session = Depends(get_db)):
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # Get best result
     result = db.query(OCRResult).filter(
         OCRResult.document_id == document_id
     ).order_by(OCRResult.confidence_score.desc()).first()
@@ -551,7 +538,6 @@ async def extract_bol_only(document_id: int, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="No OCR results found")
     
-    # Extract B/L
     bol_data = bol_extractor.extract(result.extracted_text)
     bol_formatted = bol_extractor.format_output(bol_data)
     
@@ -659,29 +645,18 @@ async def process_bill_of_lading(
 ):
     """
     🚢 DEDICATED Bill of Lading Processing Endpoint
-    
-    Pipeline:
-    1. OCR extraction with all available engines
-    2. OCR error correction (fix character confusions, BOL-specific mistakes)
-    3. Text cleaning (remove garbage)
-    4. Structured BOL data extraction
-    
-    Returns clean, structured BOL data
     """
     start_time = time.time()
     
     try:
-        # Read file
         file_bytes = await file.read()
         
-        # Validate
         is_valid, message = ImageUtils.validate_image(file_bytes, file.filename)
         if not is_valid:
             raise HTTPException(status_code=400, detail=message)
         
         print(f"\n🚢 Processing Bill of Lading: {file.filename}")
         
-        # Initialize OCR engines
         ocr_engines = []
         
         if EASYOCR_AVAILABLE and easyocr_engine:
@@ -692,10 +667,8 @@ async def process_bill_of_lading(
         
         ocr_engines.append(tesseract)
         
-        # 🔥 STEP 1: Preprocess image
         preprocessed_img, prep_metadata = preprocessor.preprocess_full_pipeline(file_bytes)
         
-        # 🔥 STEP 2: Run OCR with all engines
         ocr_results = []
         for engine in ocr_engines:
             if engine:
@@ -706,23 +679,19 @@ async def process_bill_of_lading(
         if not ocr_results:
             raise ValueError("All OCR engines failed to extract text")
         
-        # Select best OCR result
         best_ocr = voting_system.merge_results(ocr_results)
         raw_text = best_ocr.get('text', '')
         
-        # 🔥 STEP 3: FIX OCR ERRORS (CRITICAL!)
         from services.fix_ocr_errors import OCRErrorFixer
         error_fixer = OCRErrorFixer()
         corrected_text = error_fixer.fix_common_errors(raw_text)
         
         print(f"  🔧 OCR errors corrected")
         
-        # 🔥 STEP 4: Clean text
         from services.advanced_bol_preprocessing import BOLTextCleaner
         text_cleaner = BOLTextCleaner()
         cleaned_text = text_cleaner.clean_bol_text(corrected_text)
         
-        # 🔥 STEP 5: Extract structured BOL data
         bol_data = bol_extractor.extract(cleaned_text)
         bol_formatted = bol_extractor.format_output(bol_data)
         
@@ -735,23 +704,11 @@ async def process_bill_of_lading(
             "status": "success",
             "file_name": file.filename,
             "processing_time": total_time,
-            
-            # Raw OCR output (before correction)
             "raw_text": raw_text,
-            
-            # After OCR error correction
             "corrected_text": corrected_text,
-            
-            # After cleaning
             "cleaned_text": cleaned_text,
-            
-            # Structured BOL data
             "bol_data": bol_data,
-            
-            # Formatted output
             "bol_formatted": bol_formatted,
-            
-            # Metadata
             "metadata": {
                 "preprocessing": prep_metadata,
                 "ocr_confidence": best_ocr.get('confidence', 0),
@@ -771,15 +728,8 @@ async def process_bill_of_lading(
 async def clean_existing_bol_text(text: str):
     """
     🧹 Clean already extracted BOL text
-    
-    Pipeline:
-    1. Fix OCR errors (character confusions, BOL-specific mistakes)
-    2. Remove garbage lines
-    3. Add proper formatting
-    4. Extract structured data
     """
     try:
-        # Import fixers
         from services.fix_ocr_errors import OCRErrorFixer
         from services.advanced_bol_preprocessing import BOLTextCleaner
         
@@ -787,13 +737,8 @@ async def clean_existing_bol_text(text: str):
         text_cleaner = BOLTextCleaner()
         extractor = BillOfLadingExtractor()
         
-        # 🔥 STEP 1: Fix OCR errors FIRST
         corrected = error_fixer.fix_common_errors(text)
-        
-        # 🔥 STEP 2: Clean text
         cleaned = text_cleaner.clean_bol_text(corrected)
-        
-        # 🔥 STEP 3: Extract structure
         bol_data = extractor.extract(cleaned)
         bol_formatted = extractor.format_output(bol_data)
         
