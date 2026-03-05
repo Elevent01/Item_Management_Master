@@ -171,61 +171,28 @@ const UserManagementSystem = () => {
     }
   };
 
-  // 🔥 FIXED: Fetches from BOTH role_access table AND rbac-options, merges them
-  // This ensures all companies (even those only in role_access) show their roles/depts/desgs
   const fetchRbacDataForCompany = async (companyId) => {
     try {
-      // Source 1: role_access table — exact role+dept+desg combos configured for this company
-      let roleAccessRows = [];
-      try {
-        const res1 = await fetch(`${API_BASE}/role-access/by-company/${companyId}`);
-        if (res1.ok) roleAccessRows = await res1.json();
-      } catch (e) {
-        console.warn('role-access API failed:', e);
-      }
-
-      // Source 2: company_role_page_access table — page-level RBAC options
-      let rbacOptions = { roles: [], departments: [], designations: [] };
-      try {
-        const res2 = await fetch(`${API_BASE}/companies/${companyId}/rbac-options`);
-        if (res2.ok) rbacOptions = await res2.json();
-      } catch (e) {
-        console.warn('rbac-options API failed:', e);
-      }
-
-      // Merge both sources — deduplicated by id
-      const rolesMap = new Map();
-      const deptsMap = new Map();
-      const desgsMap = new Map();
-
-      // From role_access rows
-      roleAccessRows.forEach(row => {
-        if (row.role_id && !rolesMap.has(row.role_id))
-          rolesMap.set(row.role_id, { id: parseInt(row.role_id), role_name: row.role_name });
-        if (row.department_id && !deptsMap.has(row.department_id))
-          deptsMap.set(row.department_id, { id: parseInt(row.department_id), department_name: row.department_name });
-        if (row.designation_id && !desgsMap.has(row.designation_id))
-          desgsMap.set(row.designation_id, { id: parseInt(row.designation_id), designation_name: row.designation_name });
-      });
-
-      // From rbac-options (supplement / fallback)
-      (rbacOptions.roles || []).forEach(r => { if (!rolesMap.has(r.id)) rolesMap.set(r.id, r); });
-      (rbacOptions.departments || []).forEach(d => { if (!deptsMap.has(d.id)) deptsMap.set(d.id, d); });
-      (rbacOptions.designations || []).forEach(d => { if (!desgsMap.has(d.id)) desgsMap.set(d.id, d); });
-
+      const res = await fetch(`${API_BASE}/companies/${companyId}/rbac-options`);
+      const data = await res.json();
+      
       setRbacDataByCompany(prev => ({
-        ...prev,
+        ...prev, 
         [companyId]: {
-          roles: Array.from(rolesMap.values()),
-          departments: Array.from(deptsMap.values()),
-          designations: Array.from(desgsMap.values())
+          roles: data.roles || [],
+          departments: data.departments || [],
+          designations: data.designations || []
         }
       }));
     } catch (err) {
       console.error('Error fetching RBAC data:', err);
       setRbacDataByCompany(prev => ({
-        ...prev,
-        [companyId]: { roles: [], departments: [], designations: [] }
+        ...prev, 
+        [companyId]: {
+          roles: [],
+          departments: [],
+          designations: []
+        }
       }));
     }
   };
