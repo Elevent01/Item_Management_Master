@@ -1,13 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Search, X, ChevronDown, AlertCircle } from 'lucide-react';
-
-// ==================== IMPORT ORIGINAL PAGES ====================
-import ItemInfoMaster from "../ItemMasterPages/ItemInfoMaster.js";
-import BreezCustomFields from "../ItemMasterPages/BreezCustomFields.js";
-// import SonataCustomFields removed for build fix
-// import SweetNutritionCustomFields removed for build fix
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { AlertCircle } from 'lucide-react';
 
 const API_BASE = 'https://item-management-master-1.onrender.com/api';
+
+// ==================== DYNAMIC IMPORTS - ek fail ho toh baaki safe rahein ====================
+const componentLoaders = {
+  'Add Item Info': () => import("../ItemMasterPages/ItemInfoMaster.js").catch(() => ({ default: () => <div style={{padding:10,color:'#dc2626',fontSize:11}}>⚠️ ItemInfoMaster load failed</div> })),
+  'Breez Custom Fields': () => import("../ItemMasterPages/BreezCustomFields.js").catch(() => ({ default: () => <div style={{padding:10,color:'#dc2626',fontSize:11}}>⚠️ BreezCustomFields load failed</div> })),
+  'Sonata Custom Fields': () => import("../ItemMasterPages/SonataCustomFields.js").catch(() => ({ default: () => <div style={{padding:10,color:'#dc2626',fontSize:11}}>⚠️ SonataCustomFields load failed</div> })),
+  'Sweet Nutrition Custom Fields': () => import("../ItemMasterPages/SweetNutritionCustomFields.js").catch(() => ({ default: () => <div style={{padding:10,color:'#dc2626',fontSize:11}}>⚠️ SweetNutritionCustomFields load failed</div> })),
+};
+
+const typeMap = {
+  'Add Item Info': 'item-info',
+  'Breez Custom Fields': 'breez',
+  'Sonata Custom Fields': 'sonata',
+  'Sweet Nutrition Custom Fields': 'sweet',
+};
 
 // ==================== MAIN INFO MASTER COMPONENT WITH RBAC ====================
 const InfoMaster = () => {
@@ -16,13 +25,36 @@ const InfoMaster = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(null);
   const [isActive, setIsActive] = useState(true);
+  // Cache loaded components to avoid re-importing
+  const [loadedComponents, setLoadedComponents] = useState({});
 
-  // 🔥 FETCH USER'S ACCESSIBLE PAGES
-  useEffect(() => {
-    fetchAccessiblePages();
+  // 🔍 EXTRACT ACCESSIBLE PAGES FROM MENU HIERARCHY
+  const extractAccessiblePages = useCallback((menuPages) => {
+    const accessiblePages = [];
+
+    const searchPages = (pages) => {
+      pages.forEach(page => {
+        if (typeMap[page.page_name] && componentLoaders[page.page_name]) {
+          accessiblePages.push({
+            type: typeMap[page.page_name],
+            page_name: page.page_name,
+            page_url: page.page_url,
+            permissions: page.permissions || [],
+            loaderKey: page.page_name,
+          });
+        }
+        if (page.children && page.children.length > 0) {
+          searchPages(page.children);
+        }
+      });
+    };
+
+    searchPages(menuPages);
+    return accessiblePages;
   }, []);
 
-  const fetchAccessiblePages = async () => {
+  // 🔥 FETCH USER'S ACCESSIBLE PAGES
+  const fetchAccessiblePages = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -45,7 +77,6 @@ const InfoMaster = () => {
         return;
       }
 
-      // If accesses missing, fetch from backend
       if (!user.accesses || user.accesses.length === 0) {
         console.log('⚡️ [INFO MASTER] Fetching user details from backend...');
         try {
@@ -76,12 +107,11 @@ const InfoMaster = () => {
         return;
       }
 
-      // Fetch accessible menu
       const menuUrl = `${API_BASE}/rbac/users/${user.id}/accessible-menu?company_id=${primaryCompanyId}`;
       console.log('📡 [INFO MASTER] Fetching menu from:', menuUrl);
 
       const menuRes = await fetch(menuUrl);
-      
+
       if (!menuRes.ok) {
         const errorData = await menuRes.json();
         console.error('❌ [INFO MASTER] API Error:', errorData);
@@ -99,7 +129,6 @@ const InfoMaster = () => {
         return;
       }
 
-      // 🎯 EXTRACT PAGES (Item Info Master + Custom Fields)
       const accessiblePages = extractAccessiblePages(menuJson.menu);
       console.log('🎯 [INFO MASTER] Accessible pages:', accessiblePages);
 
@@ -109,22 +138,39 @@ const InfoMaster = () => {
         return;
       }
 
-      // Map to dropdown options
+      // 🔄 Dynamically load only the components this user actually has access to
+      const componentsMap = {};
+      await Promise.all(
+        accessiblePages.map(async (page) => {
+          try {
+            const mod = await componentLoaders[page.loaderKey]();
+            componentsMap[page.type] = mod.default;
+          } catch (e) {
+            console.error(`❌ Failed to load component for ${page.page_name}:`, e);
+            componentsMap[page.type] = () => (
+              <div style={{ padding: 10, color: '#dc2626', fontSize: 11 }}>
+                ⚠️ {page.page_name} could not be loaded.
+              </div>
+            );
+          }
+        })
+      );
+
+      setLoadedComponents(componentsMap);
+
       const options = accessiblePages.map(page => ({
         value: page.type,
         label: page.page_name,
         page_url: page.page_url,
-        component: page.component
       }));
 
       setAccessibleOptions(options);
-      
-      // Set first tab as active for multiple custom fields
-      const customFieldsOptions = options.filter(opt => opt.value !== 'item-info');
-      if (customFieldsOptions.length > 0) {
-        setActiveTab(customFieldsOptions[0].value);
+
+      const customFieldsOpts = options.filter(opt => opt.value !== 'item-info');
+      if (customFieldsOpts.length > 0) {
+        setActiveTab(customFieldsOpts[0].value);
       }
-      
+
       setLoading(false);
 
     } catch (err) {
@@ -132,76 +178,33 @@ const InfoMaster = () => {
       setError(`Error: ${err.message}`);
       setLoading(false);
     }
-  };
+  }, [extractAccessiblePages]);
 
-  // 🔍 EXTRACT ACCESSIBLE PAGES FROM MENU HIERARCHY
-  const extractAccessiblePages = (menuPages) => {
-    const accessiblePages = [];
-    
-    // Define page name to type and component mapping
-    const pageMap = {
-      'Add Item Info': {
-        type: 'item-info',
-        component: ItemInfoMaster
-      },
-      'Breez Custom Fields': {
-        type: 'breez',
-        component: BreezCustomFields
-      },
-      'Sonata Custom Fields': {
-        type: 'sonata',
-        component: SonataCustomFields
-      },
-      'Sweet Nutrition Custom Fields': {
-        type: 'sweet',
-        component: SweetNutritionCustomFields
-      }
-    };
+  useEffect(() => {
+    fetchAccessiblePages();
+  }, [fetchAccessiblePages]);
 
-    const searchPages = (pages) => {
-      pages.forEach(page => {
-        // Check if this page is one of our target pages
-        if (pageMap[page.page_name]) {
-          accessiblePages.push({
-            type: pageMap[page.page_name].type,
-            page_name: page.page_name,
-            page_url: page.page_url,
-            permissions: page.permissions || [],
-            component: pageMap[page.page_name].component
-          });
-        }
-        
-        // Search in children
-        if (page.children && page.children.length > 0) {
-          searchPages(page.children);
-        }
-      });
-    };
-
-    searchPages(menuPages);
-    return accessiblePages;
-  };
-
-  // Separate Item Info Master and Custom Fields
   const itemInfoOption = accessibleOptions.find(opt => opt.value === 'item-info');
   const customFieldsOptions = accessibleOptions.filter(opt => opt.value !== 'item-info');
   const hasMultipleCustomFields = customFieldsOptions.length > 1;
+
+  const ItemInfoMasterComp = loadedComponents['item-info'];
 
   return (
     <div className="w-full h-full bg-white rounded-lg shadow-md flex flex-col overflow-hidden">
       {/* Header with Active/Inactive Button */}
       <div className="px-2.5 py-0 border-b border-gray-300 flex items-center justify-between bg-gradient-to-r from-gray-700 to-blue-400 text-white" style={{ height: '24px', paddingRight: '8px' }}>
         <h2 className="m-0 text-xs font-semibold">Create Item Code 👇</h2>
-        <button 
-          onClick={() => setIsActive(!isActive)} 
-          style={{ 
-            padding: '2px 12px', 
-            background: isActive ? '#10b981' : '#ef4444', 
-            color: '#fff', 
-            border: 'none', 
-            borderRadius: 3, 
-            cursor: 'pointer', 
-            fontSize: 10, 
+        <button
+          onClick={() => setIsActive(!isActive)}
+          style={{
+            padding: '2px 12px',
+            background: isActive ? '#10b981' : '#ef4444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 3,
+            cursor: 'pointer',
+            fontSize: 10,
             fontWeight: 500,
             height: '18px',
             lineHeight: '14px'
@@ -231,15 +234,15 @@ const InfoMaster = () => {
             <div style={{ fontSize: "48px" }}>🔒</div>
             <div style={{ fontSize: "12px", color: "#dc2626", fontWeight: "600" }}>No Access</div>
             <div style={{ fontSize: "10px", color: "#7f1d1d", textAlign: "center", maxWidth: "400px" }}>
-              You don't have access to any Item Master pages. Please contact your administrator.
+              You don&apos;t have access to any Item Master pages. Please contact your administrator.
             </div>
           </div>
         ) : (
           <div>
             {/* Render Item Info Master if accessible */}
-            {itemInfoOption && (
+            {itemInfoOption && ItemInfoMasterComp && (
               <div style={{ marginBottom: "20px" }}>
-                <ItemInfoMaster />
+                <ItemInfoMasterComp />
               </div>
             )}
 
@@ -247,7 +250,6 @@ const InfoMaster = () => {
             {customFieldsOptions.length > 0 && (
               <div>
                 {hasMultipleCustomFields ? (
-                  // Multiple custom fields - show tabs
                   <div>
                     {/* Tabs Header */}
                     <div style={{ display: "flex", borderBottom: "2px solid #e5e7eb", marginBottom: "16px" }}>
@@ -276,7 +278,8 @@ const InfoMaster = () => {
                     {/* Active Tab Content */}
                     {customFieldsOptions.map((option) => {
                       if (activeTab === option.value) {
-                        const Component = option.component;
+                        const Component = loadedComponents[option.value];
+                        if (!Component) return null;
                         return (
                           <div key={option.value}>
                             <Component />
@@ -290,7 +293,8 @@ const InfoMaster = () => {
                   // Single custom field - show directly without tabs
                   <div>
                     {customFieldsOptions.map((option) => {
-                      const Component = option.component;
+                      const Component = loadedComponents[option.value];
+                      if (!Component) return null;
                       return (
                         <div key={option.value}>
                           <Component />
