@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, X, ChevronDown, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { AlertCircle } from 'lucide-react';
 
 // ==================== IMPORT ORIGINAL PAGES ====================
 import ItemInfoMaster from "../ItemMasterPages/ItemInfoMaster.js";
@@ -17,12 +17,53 @@ const InfoMaster = () => {
   const [activeTab, setActiveTab] = useState(null);
   const [isActive, setIsActive] = useState(true);
 
-  // 🔥 FETCH USER'S ACCESSIBLE PAGES
-  useEffect(() => {
-    fetchAccessiblePages();
+  // 🔍 EXTRACT ACCESSIBLE PAGES FROM MENU HIERARCHY
+  const extractAccessiblePages = useCallback((menuPages) => {
+    const accessiblePages = [];
+
+    // Define page name to type and component mapping
+    const pageMap = {
+      'Add Item Info': {
+        type: 'item-info',
+        component: ItemInfoMaster
+      },
+      'Breez Custom Fields': {
+        type: 'breez',
+        component: BreezCustomFields
+      },
+      'Sonata Custom Fields': {
+        type: 'sonata',
+        component: SonataCustomFields
+      },
+      'Sweet Nutrition Custom Fields': {
+        type: 'sweet',
+        component: SweetNutritionCustomFields
+      }
+    };
+
+    const searchPages = (pages) => {
+      pages.forEach(page => {
+        if (pageMap[page.page_name]) {
+          accessiblePages.push({
+            type: pageMap[page.page_name].type,
+            page_name: page.page_name,
+            page_url: page.page_url,
+            permissions: page.permissions || [],
+            component: pageMap[page.page_name].component
+          });
+        }
+        if (page.children && page.children.length > 0) {
+          searchPages(page.children);
+        }
+      });
+    };
+
+    searchPages(menuPages);
+    return accessiblePages;
   }, []);
 
-  const fetchAccessiblePages = async () => {
+  // 🔥 FETCH USER'S ACCESSIBLE PAGES
+  const fetchAccessiblePages = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -81,7 +122,7 @@ const InfoMaster = () => {
       console.log('📡 [INFO MASTER] Fetching menu from:', menuUrl);
 
       const menuRes = await fetch(menuUrl);
-      
+
       if (!menuRes.ok) {
         const errorData = await menuRes.json();
         console.error('❌ [INFO MASTER] API Error:', errorData);
@@ -118,13 +159,13 @@ const InfoMaster = () => {
       }));
 
       setAccessibleOptions(options);
-      
+
       // Set first tab as active for multiple custom fields
-      const customFieldsOptions = options.filter(opt => opt.value !== 'item-info');
-      if (customFieldsOptions.length > 0) {
-        setActiveTab(customFieldsOptions[0].value);
+      const customFieldsOpts = options.filter(opt => opt.value !== 'item-info');
+      if (customFieldsOpts.length > 0) {
+        setActiveTab(customFieldsOpts[0].value);
       }
-      
+
       setLoading(false);
 
     } catch (err) {
@@ -132,55 +173,12 @@ const InfoMaster = () => {
       setError(`Error: ${err.message}`);
       setLoading(false);
     }
-  };
+  }, [extractAccessiblePages]);
 
-  // 🔍 EXTRACT ACCESSIBLE PAGES FROM MENU HIERARCHY
-  const extractAccessiblePages = (menuPages) => {
-    const accessiblePages = [];
-    
-    // Define page name to type and component mapping
-    const pageMap = {
-      'Add Item Info': {
-        type: 'item-info',
-        component: ItemInfoMaster
-      },
-      'Breez Custom Fields': {
-        type: 'breez',
-        component: BreezCustomFields
-      },
-      'Sonata Custom Fields': {
-        type: 'sonata',
-        component: SonataCustomFields
-      },
-      'Sweet Nutrition Custom Fields': {
-        type: 'sweet',
-        component: SweetNutritionCustomFields
-      }
-    };
-
-    const searchPages = (pages) => {
-      pages.forEach(page => {
-        // Check if this page is one of our target pages
-        if (pageMap[page.page_name]) {
-          accessiblePages.push({
-            type: pageMap[page.page_name].type,
-            page_name: page.page_name,
-            page_url: page.page_url,
-            permissions: page.permissions || [],
-            component: pageMap[page.page_name].component
-          });
-        }
-        
-        // Search in children
-        if (page.children && page.children.length > 0) {
-          searchPages(page.children);
-        }
-      });
-    };
-
-    searchPages(menuPages);
-    return accessiblePages;
-  };
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    fetchAccessiblePages();
+  }, [fetchAccessiblePages]);
 
   // Separate Item Info Master and Custom Fields
   const itemInfoOption = accessibleOptions.find(opt => opt.value === 'item-info');
@@ -192,16 +190,16 @@ const InfoMaster = () => {
       {/* Header with Active/Inactive Button */}
       <div className="px-2.5 py-0 border-b border-gray-300 flex items-center justify-between bg-gradient-to-r from-gray-700 to-blue-400 text-white" style={{ height: '24px', paddingRight: '8px' }}>
         <h2 className="m-0 text-xs font-semibold">Create Item Code 👇</h2>
-        <button 
-          onClick={() => setIsActive(!isActive)} 
-          style={{ 
-            padding: '2px 12px', 
-            background: isActive ? '#10b981' : '#ef4444', 
-            color: '#fff', 
-            border: 'none', 
-            borderRadius: 3, 
-            cursor: 'pointer', 
-            fontSize: 10, 
+        <button
+          onClick={() => setIsActive(!isActive)}
+          style={{
+            padding: '2px 12px',
+            background: isActive ? '#10b981' : '#ef4444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 3,
+            cursor: 'pointer',
+            fontSize: 10,
             fontWeight: 500,
             height: '18px',
             lineHeight: '14px'
@@ -231,7 +229,7 @@ const InfoMaster = () => {
             <div style={{ fontSize: "48px" }}>🔒</div>
             <div style={{ fontSize: "12px", color: "#dc2626", fontWeight: "600" }}>No Access</div>
             <div style={{ fontSize: "10px", color: "#7f1d1d", textAlign: "center", maxWidth: "400px" }}>
-              You don't have access to any Item Master pages. Please contact your administrator.
+              You don&apos;t have access to any Item Master pages. Please contact your administrator.
             </div>
           </div>
         ) : (
