@@ -12,6 +12,7 @@ import FixBottom from './components/FixBottom';
 import FixMainDashRender from './components/FixMainDashRender';
 import OCRRightPanel from './OCRComponents/OCRRightPanel';
 import ItemMasterRightPanel from './components/ItemMasterRightPanel';
+import CreateItemMaster from './ItemMasterPages/CreateItemMaster';
 import RoleAccessForCompaniesPlantRightPanel from './AdminIconPages/RoleAccessForCompaniesPlantRightPanel';
 import UserPlantCompanyAccessRightPanel from './AdminIconPages/UserPlantCompanyAccessRightPanel';
 import ExcelImporterRightPanel from './pages/ExcelImporterRightPanel';
@@ -59,7 +60,7 @@ function DashboardContent({ userData, onLogout, currentUserId, children }) {
       {/* 🔥 RIGHT PANEL - Conditionally render based on active tab path */}
       <RightPanel currentUserId={currentUserId}>
         {isOCRDashboard && <OCRRightPanel />}
-        {isCreateItemMaster && <ItemMasterRightPanel />}
+        {isCreateItemMaster && <CreateItemMaster />}
         {isRoleAccessForCompaniesPlant && <RoleAccessForCompaniesPlantRightPanel />}
         {isUserPlantCompanyAccess && <UserPlantCompanyAccessRightPanel />}
         {isExcelImporter && <ExcelImporterRightPanel />}
