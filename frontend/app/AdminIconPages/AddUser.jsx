@@ -70,6 +70,11 @@ const UserManagementSystem = () => {
       
       // Set filtered companies (only those user has access to)
       setCompanies(data.companies || []);
+
+      // ✅ Pre-fetch RBAC data for ALL accessible companies with correct userId
+      (data.companies || []).forEach(company => {
+        fetchRbacDataForCompany(company.id, currentUserId);
+      });
     } catch (err) {
       console.error('Error fetching current user access:', err);
     }
@@ -107,13 +112,8 @@ const UserManagementSystem = () => {
     }
   };
 
-  // Fetch primary company RBAC data and plants
-  useEffect(() => {
-    if (formData.primary_company_id) {
-      fetchRbacDataForCompany(formData.primary_company_id);
-      fetchPlantsForCompany(formData.primary_company_id);
-    }
-  }, [formData.primary_company_id]);
+  // Primary company RBAC + plants are now fetched directly in handlePrimaryCompanyChange
+  // to avoid stale currentUserId closure issue
 
   // Fetch additional companies data
   useEffect(() => {
@@ -171,9 +171,13 @@ const UserManagementSystem = () => {
     }
   };
 
-  const fetchRbacDataForCompany = async (companyId) => {
+  const fetchRbacDataForCompany = async (companyId, userId = null) => {
+    const uid = userId || currentUserId;
     try {
-      const res = await fetch(`${API_BASE}/companies/${companyId}/rbac-options`);
+      const url = uid
+        ? `${API_BASE}/companies/${companyId}/rbac-options?current_user_id=${uid}`
+        : `${API_BASE}/companies/${companyId}/rbac-options`;
+      const res = await fetch(url);
       const data = await res.json();
       
       setRbacDataByCompany(prev => ({
@@ -198,54 +202,25 @@ const UserManagementSystem = () => {
   };
 
   const updateAvailableRolesDeptDesignations = () => {
-    const selectedCompanyIds = [
-      formData.primary_company_id,
-      ...formData.additional_companies
-    ].filter(Boolean);
-
-    if (selectedCompanyIds.length === 0) {
+    // ✅ Sirf PRIMARY company ke role/dept/desg show karo
+    if (!formData.primary_company_id) {
       setAvailableRoles([]);
       setAvailableDepartments([]);
       setAvailableDesignations([]);
       return;
     }
 
-    const rolesMap = new Map();
-    const deptsMap = new Map();
-    const desgsMap = new Map();
+    const rbacData = rbacDataByCompany[formData.primary_company_id];
+    if (!rbacData) {
+      setAvailableRoles([]);
+      setAvailableDepartments([]);
+      setAvailableDesignations([]);
+      return;
+    }
 
-    selectedCompanyIds.forEach(companyId => {
-      const rbacData = rbacDataByCompany[companyId];
-      if (!rbacData) return;
-
-      if (rbacData.roles) {
-        rbacData.roles.forEach(role => {
-          if (!rolesMap.has(role.id)) {
-            rolesMap.set(role.id, role);
-          }
-        });
-      }
-
-      if (rbacData.departments) {
-        rbacData.departments.forEach(dept => {
-          if (!deptsMap.has(dept.id)) {
-            deptsMap.set(dept.id, dept);
-          }
-        });
-      }
-
-      if (rbacData.designations) {
-        rbacData.designations.forEach(desg => {
-          if (!desgsMap.has(desg.id)) {
-            desgsMap.set(desg.id, desg);
-          }
-        });
-      }
-    });
-
-    setAvailableRoles(Array.from(rolesMap.values()));
-    setAvailableDepartments(Array.from(deptsMap.values()));
-    setAvailableDesignations(Array.from(desgsMap.values()));
+    setAvailableRoles(rbacData.roles || []);
+    setAvailableDepartments(rbacData.departments || []);
+    setAvailableDesignations(rbacData.designations || []);
   };
 
   const fetchAccessiblePages = async () => {
@@ -277,6 +252,11 @@ const UserManagementSystem = () => {
       primary_plant_id: null
     }));
     setAccessiblePages([]);
+    // ✅ Fetch RBAC with userId passed directly (avoids stale closure issue)
+    if (id) {
+      fetchRbacDataForCompany(id, currentUserId);
+      fetchPlantsForCompany(id);
+    }
   };
 
   const handleAdditionalCompanySelect = (companyId) => {
