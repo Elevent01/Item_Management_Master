@@ -30,9 +30,13 @@ const UserManagementSystem = () => {
 
   const [plantsByCompany, setPlantsByCompany] = useState({});
   const [rbacDataByCompany, setRbacDataByCompany] = useState({});
+
+  // 🔥 NEW: Company-specific role/dept/desg (filtered by role_access table)
+  const [companyRoleAccessList, setCompanyRoleAccessList] = useState([]); // raw role_access rows for primary company
   const [availableRoles, setAvailableRoles] = useState([]);
   const [availableDepartments, setAvailableDepartments] = useState([]);
   const [availableDesignations, setAvailableDesignations] = useState([]);
+
   const [accessiblePages, setAccessiblePages] = useState([]);
   const [errors, setErrors] = useState({});
 
@@ -80,7 +84,7 @@ const UserManagementSystem = () => {
     if (currentUserId) {
       fetchFilteredUsers();
     }
-  }, [currentUserId]); // ✅ Depends on currentUserId, not currentUserAccess
+  }, [currentUserId]);
 
   // ✅ Fetch ONLY users that share companies/plants with current user
   const fetchFilteredUsers = async () => {
@@ -92,12 +96,10 @@ const UserManagementSystem = () => {
     setLoading(true);
     try {
       console.log('🔍 Fetching filtered users for current_user_id:', currentUserId);
-      
-      // 🔥 FIXED: Pass current_user_id parameter
       const res = await fetch(`${API_BASE}/users?current_user_id=${currentUserId}`);
       const filteredUsers = await res.json();
       
-      console.log(`✅ Filtered Users (sharing companies/plants): ${filteredUsers.length} users found`);
+      console.log(`✅ Filtered Users: ${filteredUsers.length} users found`);
       setUsers(filteredUsers);
     } catch (err) {
       console.error('❌ Error fetching users:', err);
@@ -107,30 +109,77 @@ const UserManagementSystem = () => {
     }
   };
 
-  // Fetch primary company RBAC data and plants
+  // 🔥 Fetch role_access list for primary company (company-specific roles/dept/desg)
   useEffect(() => {
     if (formData.primary_company_id) {
-      fetchRbacDataForCompany(formData.primary_company_id);
+      fetchCompanyRoleAccessList(formData.primary_company_id);
       fetchPlantsForCompany(formData.primary_company_id);
+    } else {
+      setCompanyRoleAccessList([]);
+      setAvailableRoles([]);
+      setAvailableDepartments([]);
+      setAvailableDesignations([]);
     }
   }, [formData.primary_company_id]);
 
-  // Fetch additional companies data
+  // Fetch additional companies data (plants only — role/dept/desg from primary company)
   useEffect(() => {
     formData.additional_companies.forEach(companyId => {
-      if (!rbacDataByCompany[companyId]) {
-        fetchRbacDataForCompany(companyId);
-      }
       if (!plantsByCompany[companyId]) {
         fetchPlantsForCompany(companyId);
       }
     });
   }, [formData.additional_companies]);
 
-  // Update available roles/departments/designations when companies change
+  // 🔥 When role changes → filter departments based on role_access entries
   useEffect(() => {
-    updateAvailableRolesDeptDesignations();
-  }, [rbacDataByCompany, formData.primary_company_id, formData.additional_companies]);
+    if (formData.role_id && companyRoleAccessList.length > 0) {
+      const roleId = parseInt(formData.role_id);
+      const matchingEntries = companyRoleAccessList.filter(entry => entry.role_id === roleId);
+      
+      // Unique departments for selected role
+      const deptMap = new Map();
+      matchingEntries.forEach(entry => {
+        if (!deptMap.has(entry.department_id)) {
+          deptMap.set(entry.department_id, {
+            id: entry.department_id,
+            department_name: entry.department_name
+          });
+        }
+      });
+      setAvailableDepartments(Array.from(deptMap.values()));
+      
+      // Reset dept & desg when role changes
+      setFormData(prev => ({ ...prev, department_id: '', designation_id: '' }));
+      setAvailableDesignations([]);
+    }
+  }, [formData.role_id, companyRoleAccessList]);
+
+  // 🔥 When department changes → filter designations based on role_access entries
+  useEffect(() => {
+    if (formData.role_id && formData.department_id && companyRoleAccessList.length > 0) {
+      const roleId = parseInt(formData.role_id);
+      const deptId = parseInt(formData.department_id);
+      const matchingEntries = companyRoleAccessList.filter(
+        entry => entry.role_id === roleId && entry.department_id === deptId
+      );
+      
+      // Unique designations for selected role+dept
+      const desgMap = new Map();
+      matchingEntries.forEach(entry => {
+        if (!desgMap.has(entry.designation_id)) {
+          desgMap.set(entry.designation_id, {
+            id: entry.designation_id,
+            designation_name: entry.designation_name
+          });
+        }
+      });
+      setAvailableDesignations(Array.from(desgMap.values()));
+      
+      // Reset desg when dept changes
+      setFormData(prev => ({ ...prev, designation_id: '' }));
+    }
+  }, [formData.department_id, formData.role_id, companyRoleAccessList]);
 
   // Fetch accessible pages when role/dept/designation is selected
   useEffect(() => {
@@ -140,6 +189,36 @@ const UserManagementSystem = () => {
       setAccessiblePages([]);
     }
   }, [formData.primary_company_id, formData.role_id, formData.department_id, formData.designation_id]);
+
+  // 🔥 NEW: Fetch role_access list for a company (returns rows with role/dept/desg combinations)
+  const fetchCompanyRoleAccessList = async (companyId) => {
+    try {
+      const res = await fetch(`${API_BASE}/role-access/by-company/${companyId}`);
+      const data = await res.json();
+      console.log('✅ Company Role Access List:', data);
+      setCompanyRoleAccessList(data || []);
+      
+      // Unique roles from the fetched list
+      const roleMap = new Map();
+      (data || []).forEach(entry => {
+        if (!roleMap.has(entry.role_id)) {
+          roleMap.set(entry.role_id, {
+            id: entry.role_id,
+            role_name: entry.role_name
+          });
+        }
+      });
+      setAvailableRoles(Array.from(roleMap.values()));
+      setAvailableDepartments([]);
+      setAvailableDesignations([]);
+    } catch (err) {
+      console.error('Error fetching company role access list:', err);
+      setCompanyRoleAccessList([]);
+      setAvailableRoles([]);
+      setAvailableDepartments([]);
+      setAvailableDesignations([]);
+    }
+  };
 
   const fetchPlantsForCompany = async (companyId) => {
     try {
@@ -155,8 +234,6 @@ const UserManagementSystem = () => {
             .map(p => p.id)
         );
         
-        // If user has specific plant access, show only those
-        // If user has company-level access (no plants), show all plants
         const hasPlantLevelAccess = currentUserAccess.plants.some(p => p.company_id === companyId);
         
         if (hasPlantLevelAccess && accessiblePlantIds.size > 0) {
@@ -169,83 +246,6 @@ const UserManagementSystem = () => {
       console.error('Error fetching plants:', err);
       setPlantsByCompany(prev => ({...prev, [companyId]: []}));
     }
-  };
-
-  const fetchRbacDataForCompany = async (companyId) => {
-    try {
-      const res = await fetch(`${API_BASE}/companies/${companyId}/rbac-options`);
-      const data = await res.json();
-      
-      setRbacDataByCompany(prev => ({
-        ...prev, 
-        [companyId]: {
-          roles: data.roles || [],
-          departments: data.departments || [],
-          designations: data.designations || []
-        }
-      }));
-    } catch (err) {
-      console.error('Error fetching RBAC data:', err);
-      setRbacDataByCompany(prev => ({
-        ...prev, 
-        [companyId]: {
-          roles: [],
-          departments: [],
-          designations: []
-        }
-      }));
-    }
-  };
-
-  const updateAvailableRolesDeptDesignations = () => {
-    const selectedCompanyIds = [
-      formData.primary_company_id,
-      ...formData.additional_companies
-    ].filter(Boolean);
-
-    if (selectedCompanyIds.length === 0) {
-      setAvailableRoles([]);
-      setAvailableDepartments([]);
-      setAvailableDesignations([]);
-      return;
-    }
-
-    const rolesMap = new Map();
-    const deptsMap = new Map();
-    const desgsMap = new Map();
-
-    selectedCompanyIds.forEach(companyId => {
-      const rbacData = rbacDataByCompany[companyId];
-      if (!rbacData) return;
-
-      if (rbacData.roles) {
-        rbacData.roles.forEach(role => {
-          if (!rolesMap.has(role.id)) {
-            rolesMap.set(role.id, role);
-          }
-        });
-      }
-
-      if (rbacData.departments) {
-        rbacData.departments.forEach(dept => {
-          if (!deptsMap.has(dept.id)) {
-            deptsMap.set(dept.id, dept);
-          }
-        });
-      }
-
-      if (rbacData.designations) {
-        rbacData.designations.forEach(desg => {
-          if (!desgsMap.has(desg.id)) {
-            desgsMap.set(desg.id, desg);
-          }
-        });
-      }
-    });
-
-    setAvailableRoles(Array.from(rolesMap.values()));
-    setAvailableDepartments(Array.from(deptsMap.values()));
-    setAvailableDesignations(Array.from(desgsMap.values()));
   };
 
   const fetchAccessiblePages = async () => {
@@ -277,6 +277,10 @@ const UserManagementSystem = () => {
       primary_plant_id: null
     }));
     setAccessiblePages([]);
+    setCompanyRoleAccessList([]);
+    setAvailableRoles([]);
+    setAvailableDepartments([]);
+    setAvailableDesignations([]);
   };
 
   const handleAdditionalCompanySelect = (companyId) => {
@@ -368,7 +372,7 @@ const UserManagementSystem = () => {
       if (res.ok) {
         setCredentials(data);
         setActiveTab('credentials');
-        fetchFilteredUsers(); // ✅ Refresh user list
+        fetchFilteredUsers();
         resetForm();
       } else {
         alert(data.detail || 'Error creating user');
@@ -396,6 +400,7 @@ const UserManagementSystem = () => {
     });
     setPlantsByCompany({});
     setRbacDataByCompany({});
+    setCompanyRoleAccessList([]);
     setAvailableRoles([]);
     setAvailableDepartments([]);
     setAvailableDesignations([]);
@@ -550,7 +555,6 @@ const UserManagementSystem = () => {
           
           {activeTab === 'list' && (
             <div>
-              {/* 🔥 Added info banner */}
               {currentUserAccess && (
                 <div style={{ marginBottom: "12px", padding: "8px 12px", background: "#dbeafe", border: "1px solid #60a5fa", borderRadius: "6px", fontSize: "10px", color: "#1e40af" }}>
                   <div style={{ fontWeight: "600", marginBottom: "4px" }}>📊 Showing users from your accessible companies:</div>
@@ -768,23 +772,29 @@ const UserManagementSystem = () => {
                     </div>
                   </div>
 
+                  {/* 🔥 UPDATED: Role, Department & Designation section - Company-specific & cascading */}
                   <div style={{ marginBottom: "10px" }}>
                     <h3 style={{ fontSize: "11px", fontWeight: "600", marginBottom: "6px", color: "#333", borderBottom: "1px solid #e8e8e8", paddingBottom: "3px", display: "flex", alignItems: "center", gap: "4px" }}>
                       <ShieldCheck size={12} />
                       Role, Department & Designation <span style={{ color: "#c00" }}>*</span>
+                      <span style={{ fontSize: "9px", color: "#10b981", fontWeight: "400", marginLeft: "4px" }}>
+                        (Based on configured access for selected company)
+                      </span>
                     </h3>
+
                     {availableRoles.length === 0 ? (
                       <div style={{ padding: "12px", background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "4px", fontSize: "10px", color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
                         <AlertCircle size={14} />
-                        <span>No role access configured for selected company. Please configure role access first in RBAC section.</span>
+                        <span>No role access configured for this company. Please configure role access first in RBAC section.</span>
                       </div>
                     ) : (
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                        {/* Role */}
                         <div>
                           <label style={s3}>Role <span style={{ color: "#c00" }}>*</span></label>
                           <select
                             value={formData.role_id}
-                            onChange={(e) => setFormData({...formData, role_id: e.target.value})}
+                            onChange={(e) => setFormData({...formData, role_id: e.target.value, department_id: '', designation_id: ''})}
                             style={{...s2, borderColor: errors.role ? '#ef4444' : '#ddd'}}
                           >
                             <option value="">Select Role</option>
@@ -794,28 +804,34 @@ const UserManagementSystem = () => {
                           </select>
                           {errors.role && <p style={{ fontSize: "9px", color: "#ef4444", marginTop: "2px" }}>{errors.role}</p>}
                         </div>
+
+                        {/* Department — shows only after role selected */}
                         <div>
                           <label style={s3}>Department <span style={{ color: "#c00" }}>*</span></label>
                           <select
                             value={formData.department_id}
-                            onChange={(e) => setFormData({...formData, department_id: e.target.value})}
-                            style={{...s2, borderColor: errors.department ? '#ef4444' : '#ddd'}}
+                            onChange={(e) => setFormData({...formData, department_id: e.target.value, designation_id: ''})}
+                            disabled={!formData.role_id}
+                            style={{...s2, borderColor: errors.department ? '#ef4444' : '#ddd', opacity: !formData.role_id ? 0.6 : 1}}
                           >
-                            <option value="">Select Department</option>
+                            <option value="">{!formData.role_id ? 'Select Role first' : 'Select Department'}</option>
                             {availableDepartments.map((dept) => (
                               <option key={dept.id} value={dept.id}>{dept.department_name}</option>
                             ))}
                           </select>
                           {errors.department && <p style={{ fontSize: "9px", color: "#ef4444", marginTop: "2px" }}>{errors.department}</p>}
                         </div>
+
+                        {/* Designation — shows only after dept selected */}
                         <div>
                           <label style={s3}>Designation <span style={{ color: "#c00" }}>*</span></label>
                           <select
                             value={formData.designation_id}
                             onChange={(e) => setFormData({...formData, designation_id: e.target.value})}
-                            style={{...s2, borderColor: errors.designation ? '#ef4444' : '#ddd'}}
+                            disabled={!formData.department_id}
+                            style={{...s2, borderColor: errors.designation ? '#ef4444' : '#ddd', opacity: !formData.department_id ? 0.6 : 1}}
                           >
-                            <option value="">Select Designation</option>
+                            <option value="">{!formData.department_id ? 'Select Department first' : 'Select Designation'}</option>
                             {availableDesignations.map((desg) => (
                               <option key={desg.id} value={desg.id}>{desg.designation_name}</option>
                             ))}
