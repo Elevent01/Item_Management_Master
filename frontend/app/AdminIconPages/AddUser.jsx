@@ -70,6 +70,11 @@ const UserManagementSystem = () => {
       
       // Set filtered companies (only those user has access to)
       setCompanies(data.companies || []);
+
+      // ✅ Pre-fetch RBAC data for ALL accessible companies with correct userId
+      (data.companies || []).forEach(company => {
+        fetchRbacDataForCompany(company.id, currentUserId);
+      });
     } catch (err) {
       console.error('Error fetching current user access:', err);
     }
@@ -107,13 +112,8 @@ const UserManagementSystem = () => {
     }
   };
 
-  // Fetch primary company RBAC data and plants
-  useEffect(() => {
-    if (formData.primary_company_id) {
-      fetchRbacDataForCompany(formData.primary_company_id);
-      fetchPlantsForCompany(formData.primary_company_id);
-    }
-  }, [formData.primary_company_id]);
+  // Primary company RBAC + plants are now fetched directly in handlePrimaryCompanyChange
+  // to avoid stale currentUserId closure issue
 
   // Fetch additional companies data
   useEffect(() => {
@@ -171,10 +171,11 @@ const UserManagementSystem = () => {
     }
   };
 
-  const fetchRbacDataForCompany = async (companyId) => {
+  const fetchRbacDataForCompany = async (companyId, userId = null) => {
+    const uid = userId || currentUserId;
     try {
-      const url = currentUserId
-        ? `${API_BASE}/companies/${companyId}/rbac-options?current_user_id=${currentUserId}`
+      const url = uid
+        ? `${API_BASE}/companies/${companyId}/rbac-options?current_user_id=${uid}`
         : `${API_BASE}/companies/${companyId}/rbac-options`;
       const res = await fetch(url);
       const data = await res.json();
@@ -280,6 +281,11 @@ const UserManagementSystem = () => {
       primary_plant_id: null
     }));
     setAccessiblePages([]);
+    // ✅ Fetch RBAC with userId passed directly (avoids stale closure issue)
+    if (id) {
+      fetchRbacDataForCompany(id, currentUserId);
+      fetchPlantsForCompany(id);
+    }
   };
 
   const handleAdditionalCompanySelect = (companyId) => {
