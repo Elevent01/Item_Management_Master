@@ -368,60 +368,11 @@ async def bulk_add_user_access(
         "errors": errors if errors else None
     }
 @router.get("/companies/{company_id}/rbac-options")
-async def get_company_rbac_options(
-    company_id: int,
-    current_user_id: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
+async def get_company_rbac_options(company_id: int, db: Session = Depends(get_db)):
     """
     Get unique roles, departments, designations for a company
-    that have page access configured in company_role_page_access table.
-    If current_user_id is provided, only returns roles/depts/desgs
-    that the current user has access to in that company (via UserCompanyAccess).
+    that have page access configured in company_role_page_access table
     """
-    # If current_user_id provided, filter by that user's specific role/dept/desg for this company
-    if current_user_id:
-        user_accesses = db.query(user_models.UserCompanyAccess).filter(
-            user_models.UserCompanyAccess.user_id == current_user_id,
-            user_models.UserCompanyAccess.company_id == company_id
-        ).options(
-            joinedload(user_models.UserCompanyAccess.role),
-            joinedload(user_models.UserCompanyAccess.department),
-            joinedload(user_models.UserCompanyAccess.designation)
-        ).all()
-
-        roles_dict = {}
-        departments_dict = {}
-        designations_dict = {}
-
-        for ua in user_accesses:
-            if ua.role_id and ua.role_id not in roles_dict:
-                roles_dict[ua.role_id] = {
-                    "id": ua.role.id,
-                    "role_name": ua.role.role_name,
-                    "role_code": ua.role.role_code
-                }
-            if ua.department_id and ua.department_id not in departments_dict:
-                departments_dict[ua.department_id] = {
-                    "id": ua.department.id,
-                    "department_name": ua.department.department_name,
-                    "department_code": ua.department.department_code
-                }
-            if ua.designation_id and ua.designation_id not in designations_dict:
-                designations_dict[ua.designation_id] = {
-                    "id": ua.designation.id,
-                    "designation_name": ua.designation.designation_name,
-                    "designation_code": ua.designation.designation_code
-                }
-
-        return {
-            "company_id": company_id,
-            "roles": list(roles_dict.values()),
-            "departments": list(departments_dict.values()),
-            "designations": list(designations_dict.values())
-        }
-
-    # Default: return all roles/depts/desgs for company from RBAC config
     accesses = db.query(rbac_models.CompanyRolePageAccess).filter(
         rbac_models.CompanyRolePageAccess.company_id == company_id
     ).options(
