@@ -1,4 +1,4 @@
-// app/layout.js - CLEAN: Login page pehle, then dashboard
+// app/layout.js 
 'use client';
 
 import './globals.css';
