@@ -173,7 +173,10 @@ const UserManagementSystem = () => {
 
   const fetchRbacDataForCompany = async (companyId) => {
     try {
-      const res = await fetch(`${API_BASE}/companies/${companyId}/rbac-options`);
+      const url = currentUserId
+        ? `${API_BASE}/companies/${companyId}/rbac-options?current_user_id=${currentUserId}`
+        : `${API_BASE}/companies/${companyId}/rbac-options`;
+      const res = await fetch(url);
       const data = await res.json();
       
       setRbacDataByCompany(prev => ({
