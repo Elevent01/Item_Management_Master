@@ -24,7 +24,7 @@ export default function OCRRightPanel({ processing = false, estimatedTime = 0, r
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/ocr/stats');
+        const res = await fetch('https://item-management-master-1.onrender.com/api/ocr/stats');
         const data = await res.json();
         setBackendStats(data);
       } catch (err) {

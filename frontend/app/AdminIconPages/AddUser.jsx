@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Key, Users, Building, Factory, UserCheck, X, Check, AlertCircle, Eye, EyeOff, Copy, CheckCircle, Save, ShieldCheck } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 const UserManagementSystem = () => {
   const [activeTab, setActiveTab] = useState('list');

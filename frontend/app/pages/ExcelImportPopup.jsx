@@ -17,7 +17,7 @@
  *       { key: 'type_name',  label: 'Type Name',   required: true  },
  *       { key: 'description',label: 'Description', required: false },
  *     ]}
- *     apiEndpoint="http://localhost:8000/api/gl-types"
+ *     apiEndpoint="https://item-management-master-1.onrender.com/api/gl-types"
  *     apiMethod="POST"                         // optional, default POST
  *     title="Import GL Types from Excel"       // optional
  *     accentColor="#8b5cf6"                    // optional (matches your page color)

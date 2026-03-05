@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import ExcelImportPopup from '../pages/ExcelImportPopup';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 // ── IFRS Standard GL Types with Indian Companies Act mapping ──
 // ── IFRS Sub-Types with Indian Schedule III labels ──

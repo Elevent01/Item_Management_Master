@@ -4,7 +4,7 @@ import {
   Package, Edit2, Trash2, Eye, ArrowRight, Info
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api/uom';
+const API_BASE = 'https://item-management-master-1.onrender.com/api/uom';
 
 const UOMMasterItemCreation = () => {
   const [categories, setCategories] = useState([]);

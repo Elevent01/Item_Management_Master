@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, FolderOpen, Save, Check, X, AlertCircle, Loader } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api/uom';
+const API_BASE = 'https://item-management-master-1.onrender.com/api/uom';
 
 const UOMCategoryPage = () => {
   const [activeTab, setActiveTab] = useState('list');

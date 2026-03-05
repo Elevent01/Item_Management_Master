@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 const COLORS = ['#3a7ca5', '#6a9aba', '#81b29a', '#f4a261', '#e76f51'];
 
 // ==================== REUSABLE COMPONENTS ====================

@@ -5,7 +5,7 @@
  * Works with existing icon system without breaking it
  */
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 /**
  * Main function: Filter any link array based on user's accessible pages

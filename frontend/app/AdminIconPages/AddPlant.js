@@ -71,9 +71,9 @@ export default function AddPlant() {
     try {
       setLoading(true);
       const [companiesRes, plantTypesRes, plantsRes] = await Promise.all([
-        fetch("http://localhost:8000/api/companies-for-plant"),
-        fetch("http://localhost:8000/api/plant-types"),
-        fetch("http://localhost:8000/api/plants"),
+        fetch("https://item-management-master-1.onrender.com/api/companies-for-plant"),
+        fetch("https://item-management-master-1.onrender.com/api/plant-types"),
+        fetch("https://item-management-master-1.onrender.com/api/plants"),
       ]);
 
       const companiesData = await companiesRes.json();
@@ -112,7 +112,7 @@ export default function AddPlant() {
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/companies/${companyId}/details`);
+      const response = await fetch(`https://item-management-master-1.onrender.com/api/companies/${companyId}/details`);
       const data = await response.json();
       setSelectedCompany(data);
       
@@ -142,13 +142,13 @@ export default function AddPlant() {
     try {
       // Check if same plant+type exists
       const response = await fetch(
-        `http://localhost:8000/api/check-plant-exists?company_id=${formData.company_id}&plant_name=${encodeURIComponent(formData.plant_name)}&plant_type_id=${formData.plant_type_id}`
+        `https://item-management-master-1.onrender.com/api/check-plant-exists?company_id=${formData.company_id}&plant_name=${encodeURIComponent(formData.plant_name)}&plant_type_id=${formData.plant_type_id}`
       );
       const data = await response.json();
 
       if (data.exists) {
         // Load existing contacts
-        const contactsRes = await fetch(`http://localhost:8000/api/plants/${data.plant_id}/contacts`);
+        const contactsRes = await fetch(`https://item-management-master-1.onrender.com/api/plants/${data.plant_id}/contacts`);
         const contactsData = await contactsRes.json();
         setExistingContacts(contactsData);
       } else {
@@ -222,15 +222,15 @@ const liveSearch = async (field, query) => {
         let url = "";
         
         if (field === 'country') {
-          url = `http://localhost:8000/api/countries?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/countries?q=${encodeURIComponent(query)}`;
         } else if (field === 'postalCode' && formData.country_id) {
-          url = `http://localhost:8000/api/postal-codes-by-country/${formData.country_id}?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/postal-codes-by-country/${formData.country_id}?q=${encodeURIComponent(query)}`;
         } else if (field === 'state' && formData.postal_code_id) {
-          url = `http://localhost:8000/api/states-by-postal/${formData.postal_code_id}?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/states-by-postal/${formData.postal_code_id}?q=${encodeURIComponent(query)}`;
         } else if (field === 'city' && formData.postal_code_id) {
-          url = `http://localhost:8000/api/cities-by-postal/${formData.postal_code_id}?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/cities-by-postal/${formData.postal_code_id}?q=${encodeURIComponent(query)}`;
         } else if (field === 'area' && formData.city_id) {
-          url = `http://localhost:8000/api/areas-by-city/${formData.city_id}?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/areas-by-city/${formData.city_id}?q=${encodeURIComponent(query)}`;
         } else {
           return;
         }
@@ -394,7 +394,7 @@ const handleLocationChange = (e, field) => {
       allPhones.forEach(phone => params.append('phones', phone));
       params.append('current_company_id', formData.company_id);
 
-      const response = await fetch('http://localhost:8000/api/check-contact-conflict', {
+      const response = await fetch('https://item-management-master-1.onrender.com/api/check-contact-conflict', {
         method: 'POST',
         body: params
       });
@@ -470,7 +470,7 @@ const handleLocationChange = (e, field) => {
         if (relationshipData.notes) submitData.append("relationship_notes", relationshipData.notes);
       }
 
-      const response = await fetch("http://localhost:8000/api/plants", {
+      const response = await fetch("https://item-management-master-1.onrender.com/api/plants", {
         method: "POST",
         body: submitData,
       });
@@ -489,7 +489,7 @@ const handleLocationChange = (e, field) => {
         setShowConflictPopup(false);
       }, 2000);
 
-      const plantsRes = await fetch("http://localhost:8000/api/plants");
+      const plantsRes = await fetch("https://item-management-master-1.onrender.com/api/plants");
       const plantsData = await plantsRes.json();
       setPlants(plantsData);
 

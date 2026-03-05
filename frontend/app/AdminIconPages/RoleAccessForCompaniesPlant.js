@@ -4,7 +4,7 @@ import { Shield, Building, Users, Briefcase, Award, FileText, Plus, Save, Trash2
 // ==================== 🔥 IMPORT FROM CONFIG FILE ====================
 import { getAllPagesForSync } from '../config/PageLinksConfig';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 // ==================== MAIN COMPONENT ====================
 const RoleAccessForCompaniesPlant = () => {

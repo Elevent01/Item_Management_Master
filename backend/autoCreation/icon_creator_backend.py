@@ -13,7 +13,7 @@ from datetime import datetime
 router = APIRouter(prefix="/api/icons", tags=["Icon Creator"])
 
 # ==================== CONFIGURATION ====================
-API_BASE = "http://localhost:8000/api"  # Backend API base URL
+API_BASE = "https://item-management-master-1.onrender.com/api"  # Backend API base URL
 
 # ==================== SMART PATH DETECTION ====================
 def get_paths():

@@ -57,8 +57,8 @@ const ConfigLinksCreator = () => {
   const ITEMS_PER_PAGE = 8;
 
   // API URLs
-  const API_URL_PAGES = 'http://localhost:8000/api/pages';
-  const API_URL_CONFIGS = 'http://localhost:8000/api/configs';
+  const API_URL_PAGES = 'https://item-management-master-1.onrender.com/api/pages';
+  const API_URL_CONFIGS = 'https://item-management-master-1.onrender.com/api/configs';
   const WS_URL = 'ws://localhost:8000/api/configs/ws';
 
   // Available icons

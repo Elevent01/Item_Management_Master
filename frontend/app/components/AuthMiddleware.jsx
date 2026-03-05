@@ -35,7 +35,7 @@ const Login = ({ onLoginSuccess }) => {
       const formData = new FormData();
       formData.append('email', email);
 
-      const response = await fetch('http://localhost:8000/api/auth/check-login-options', {
+      const response = await fetch('https://item-management-master-1.onrender.com/api/auth/check-login-options', {
         method: 'POST',
         body: formData
       });
@@ -65,7 +65,7 @@ const Login = ({ onLoginSuccess }) => {
       formData.append('user_id', email);
       formData.append('password', password);
 
-      const response = await fetch('http://localhost:8000/api/auth/login/password', {
+      const response = await fetch('https://item-management-master-1.onrender.com/api/auth/login/password', {
         method: 'POST',
         body: formData
       });
@@ -165,7 +165,7 @@ const Login = ({ onLoginSuccess }) => {
       formData.append('email', email);
       formData.append('video_frame', capturedImage);
 
-      const response = await fetch('http://localhost:8000/api/auth/login/face-live', {
+      const response = await fetch('https://item-management-master-1.onrender.com/api/auth/login/face-live', {
         method: 'POST',
         body: formData
       });

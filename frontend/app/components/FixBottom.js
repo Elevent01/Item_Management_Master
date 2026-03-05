@@ -5,7 +5,7 @@ import { X, Lock, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useEffect, useState } from "react";
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 export default function FixBottom() {
   const { leftWidth, isDraggingLeft, tabs, removeTab, activeTab, setActiveTab, isLeftPanelOpen, setShowAddCompany } = usePanelWidth();

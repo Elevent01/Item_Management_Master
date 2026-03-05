@@ -21,7 +21,7 @@ export default function AddCompanyType() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("http://localhost:8000/api/company-types");
+      const response = await fetch("https://item-management-master-1.onrender.com/api/company-types");
       if (!response.ok) {
         throw new Error("Failed to load company types. Please check backend connection.");
       }
@@ -74,8 +74,8 @@ export default function AddCompanyType() {
       const type_code = generateTypeCode(formData.type_name);
       
       const url = editingId 
-        ? `http://localhost:8000/api/company-types/${editingId}`
-        : "http://localhost:8000/api/company-types";
+        ? `https://item-management-master-1.onrender.com/api/company-types/${editingId}`
+        : "https://item-management-master-1.onrender.com/api/company-types";
       
       const method = editingId ? "PUT" : "POST";
       
@@ -124,7 +124,7 @@ export default function AddCompanyType() {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/company-types/${id}`, {
+      const response = await fetch(`https://item-management-master-1.onrender.com/api/company-types/${id}`, {
         method: "DELETE",
       });
 

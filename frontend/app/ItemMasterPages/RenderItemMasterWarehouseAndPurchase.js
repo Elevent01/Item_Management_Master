@@ -3,7 +3,7 @@ import { AlertCircle } from 'lucide-react';
 import ItemMasterWarehouseDetails from "../ItemMasterPages/ItemMasterWarehouseDetails.js";
 import ItemMasterPurchaseDetails from "../ItemMasterPages/ItemMasterPurchaseDetails.js";
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 // ==================== RENDER ITEM MASTER WAREHOUSE AND PURCHASE COMPONENT WITH RBAC ====================
 const RenderItemMasterWarehouseAndPurchase = () => {

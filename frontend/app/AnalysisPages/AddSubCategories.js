@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Factory, FolderPlus, Folder, Search, Eye, Edit, Trash2, CheckCircle, XCircle, AlertCircle, Loader, ChevronDown, ChevronRight, Grid, List, Plus, Save, Layers, Info, Globe } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 export default function AddSubCategories() {
   const [loading, setLoading] = useState(false);

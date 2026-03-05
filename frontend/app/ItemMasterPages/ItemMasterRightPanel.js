@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, ChevronDown, AlertCircle, Calendar, FileSpreadsheet, Save } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 const ItemMasterRightPanel = () => {
   const [loading, setLoading] = useState(false);

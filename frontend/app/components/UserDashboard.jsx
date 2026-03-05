@@ -23,8 +23,8 @@ export default function UserDashboard({ currentUserId }) {
       console.log('🔍 Loading data for User ID:', currentUserId);
 
       // 🔥 Backend automatically checks token and returns correct user's data
-      const profileData = await fetchUserData('http://localhost:8000/api/profile/me');
-      const companiesData = await fetchUserData('http://localhost:8000/api/profile/my-companies');
+      const profileData = await fetchUserData('https://item-management-master-1.onrender.com/api/profile/me');
+      const companiesData = await fetchUserData('https://item-management-master-1.onrender.com/api/profile/my-companies');
       
       // 🔥 Verify we got correct user's data
       if (profileData.id !== currentUserId) {

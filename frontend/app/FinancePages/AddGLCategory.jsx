@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import ExcelImportPopup from '../pages/ExcelImportPopup';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 // ─── Shared design tokens ────────────────────────────────────────────────────
 const COLOR      = '#7c3aed';

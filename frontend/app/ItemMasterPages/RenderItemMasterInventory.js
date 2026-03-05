@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
 import ItemMasterInventory from "../ItemMasterPages/ItemMasterInventory.js";
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 // ==================== RENDER ITEM MASTER INVENTORY COMPONENT WITH RBAC ====================
 const RenderItemMasterInventory = () => {

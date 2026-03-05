@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, Loader2, AlertCircle, FileImage, X, Hash, Copy, Download, Save, Search, Trash2, Plus } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api/ocr';
+const API_BASE = 'https://item-management-master-1.onrender.com/api/ocr';
 
 // Words Note Component
 function WordsNote({ sourceText, onClose }) {

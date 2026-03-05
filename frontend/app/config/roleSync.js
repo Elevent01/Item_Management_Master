@@ -8,7 +8,7 @@
 
 import { pageRegistry } from './pageRegistry';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://item-management-master-1.onrender.com/api';
 
 // Main auto sync function
 export const autoSyncPages = async () => {

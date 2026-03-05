@@ -3,7 +3,7 @@ import { AlertCircle } from 'lucide-react';
 import ItemMasterSalesDetail from "../ItemMasterPages/ItemMasterSalesDetail.js";
 import ItemMasterFinanceDetails from "../ItemMasterPages/ItemMasterFinanceDetails.js";
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 // ==================== RENDER ITEM MASTER SALES AND FINANCE COMPONENT WITH RBAC ====================
 const RenderItemMasterSalesAndFinance = () => {

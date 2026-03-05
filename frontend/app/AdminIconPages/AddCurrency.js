@@ -21,7 +21,7 @@ export default function AddCurrency() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("http://localhost:8000/api/currencies");
+      const response = await fetch("https://item-management-master-1.onrender.com/api/currencies");
       if (!response.ok) {
         throw new Error("Failed to load currencies. Please check backend connection.");
       }
@@ -72,7 +72,7 @@ export default function AddCurrency() {
       const currency_code = generateCurrencyCode(formData.currency_name);
       const currency_symbol = generateCurrencySymbol(formData.currency_name);
       
-      const url = editingId ? `http://localhost:8000/api/currencies/${editingId}` : "http://localhost:8000/api/currencies";
+      const url = editingId ? `https://item-management-master-1.onrender.com/api/currencies/${editingId}` : "https://item-management-master-1.onrender.com/api/currencies";
       const method = editingId ? "PUT" : "POST";
       
       const response = await fetch(url, {
@@ -111,7 +111,7 @@ export default function AddCurrency() {
     if (!confirm("Are you sure you want to delete this currency?")) return;
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/currencies/${id}`, { method: "DELETE" });
+      const response = await fetch(`https://item-management-master-1.onrender.com/api/currencies/${id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Failed to delete currency");
       setSuccess("Currency deleted successfully!");
       await fetchCurrencies();

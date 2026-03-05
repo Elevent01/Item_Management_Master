@@ -25,7 +25,7 @@ export default function AddPlantType() {
       if (formData.type_name.trim()) {
         try {
           const response = await fetch(
-            `http://localhost:8000/api/generate-plant-type-code?type_name=${encodeURIComponent(formData.type_name)}`,
+            `https://item-management-master-1.onrender.com/api/generate-plant-type-code?type_name=${encodeURIComponent(formData.type_name)}`,
             { method: "POST" }
           );
           if (response.ok) {
@@ -48,7 +48,7 @@ export default function AddPlantType() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("http://localhost:8000/api/plant-types");
+      const response = await fetch("https://item-management-master-1.onrender.com/api/plant-types");
       if (!response.ok) {
         throw new Error("Failed to load plant types. Please check backend connection.");
       }
@@ -87,8 +87,8 @@ export default function AddPlantType() {
       setLoading(true);
       
       const url = editingId 
-        ? `http://localhost:8000/api/plant-types/${editingId}`
-        : "http://localhost:8000/api/plant-types";
+        ? `https://item-management-master-1.onrender.com/api/plant-types/${editingId}`
+        : "https://item-management-master-1.onrender.com/api/plant-types";
       
       const method = editingId ? "PUT" : "POST";
       
@@ -149,7 +149,7 @@ export default function AddPlantType() {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/plant-types/${id}`, {
+      const response = await fetch(`https://item-management-master-1.onrender.com/api/plant-types/${id}`, {
         method: "DELETE",
       });
 

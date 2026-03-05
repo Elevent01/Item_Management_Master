@@ -109,7 +109,7 @@ def read_root():
             "✅ Automated Page Creation & Management",
             "✅ Icon Page Creator with Auto-Registration"
         ],
-        "docs": "http://localhost:8000/docs"
+        "docs": "https://item-management-master-1.onrender.com/docs"
     }
 
 

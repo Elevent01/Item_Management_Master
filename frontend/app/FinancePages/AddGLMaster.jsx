@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Building, Factory, DollarSign, Search, Eye, CheckCircle, XCircle, AlertCircle, Loader, Grid, List, Plus, Save, Info, Globe, Upload } from 'lucide-react';
 import ExcelImportPopup from '../pages/ExcelImportPopup';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 export default function AddGLMaster() {
   const [loading, setLoading] = useState(false);
@@ -75,7 +75,7 @@ export default function AddGLMaster() {
       if (err.name === 'AbortError') {
         setMessage({ type: 'error', text: 'Request timeout. Please check if backend is running.' });
       } else if (err.message.includes('Failed to fetch')) {
-        setMessage({ type: 'error', text: 'Cannot connect to backend. Please ensure the server is running on http://localhost:8000' });
+        setMessage({ type: 'error', text: 'Cannot connect to backend. Please ensure the server is running on https://item-management-master-1.onrender.com' });
       } else {
         setMessage({ type: 'error', text: `Failed to load GL accounts: ${err.message}` });
       }
@@ -148,7 +148,7 @@ export default function AddGLMaster() {
       if (err.name === 'AbortError') {
         setMessage({ type: 'error', text: 'Request timeout. Please check if backend is running.' });
       } else if (err.message.includes('Failed to fetch')) {
-        setMessage({ type: 'error', text: 'Cannot connect to backend. Please ensure the server is running on http://localhost:8000' });
+        setMessage({ type: 'error', text: 'Cannot connect to backend. Please ensure the server is running on https://item-management-master-1.onrender.com' });
       } else {
         setMessage({ type: 'error', text: `Failed to load companies: ${err.message}` });
       }
@@ -331,7 +331,7 @@ export default function AddGLMaster() {
             Unable to connect to the backend server. Please ensure:
           </p>
           <ul style={{ textAlign: "left", fontSize: "13px", color: "#666", lineHeight: "1.8", marginBottom: "20px" }}>
-            <li>The FastAPI backend is running on <code style={{ background: "#f3f4f6", padding: "2px 6px", borderRadius: "3px" }}>http://localhost:8000</code></li>
+            <li>The FastAPI backend is running on <code style={{ background: "#f3f4f6", padding: "2px 6px", borderRadius: "3px" }}>https://item-management-master-1.onrender.com</code></li>
             <li>CORS is properly configured in the backend</li>
             <li>No firewall is blocking the connection</li>
             <li>The API endpoints are available</li>

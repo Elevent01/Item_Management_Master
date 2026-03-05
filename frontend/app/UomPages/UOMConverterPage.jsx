@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, ArrowRight, Calculator, AlertCircle, Copy, History, Zap, CheckCircle, Trash2, Loader } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api/uom';
+const API_BASE = 'https://item-management-master-1.onrender.com/api/uom';
 
 const UOMConverterPage = () => {
   const [categories, setCategories] = useState([]);

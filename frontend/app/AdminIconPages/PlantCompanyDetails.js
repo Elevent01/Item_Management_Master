@@ -18,9 +18,9 @@ export default function PlantCompanyDetails() {
     try {
       setLoading(true);
       const [companies, plants, plantTypes] = await Promise.all([
-        fetch("http://localhost:8000/api/companies").then(r => r.json()),
-        fetch("http://localhost:8000/api/plants").then(r => r.json()),
-        fetch("http://localhost:8000/api/plant-types").then(r => r.json())
+        fetch("https://item-management-master-1.onrender.com/api/companies").then(r => r.json()),
+        fetch("https://item-management-master-1.onrender.com/api/plants").then(r => r.json()),
+        fetch("https://item-management-master-1.onrender.com/api/plant-types").then(r => r.json())
       ]);
       setData({ companies, plants, plantTypes });
       calculateStats(companies, plants);
@@ -60,9 +60,9 @@ export default function PlantCompanyDetails() {
   const handleDelete = async (type, id, name) => {
     if (!confirm(`Delete ${name}?`)) return;
     try {
-      const url = type === 'company' ? `http://localhost:8000/api/companies/${id}` : 
-                  type === 'plant' ? `http://localhost:8000/api/plants/${id}` :
-                  `http://localhost:8000/api/plant-types/${id}`;
+      const url = type === 'company' ? `https://item-management-master-1.onrender.com/api/companies/${id}` : 
+                  type === 'plant' ? `https://item-management-master-1.onrender.com/api/plants/${id}` :
+                  `https://item-management-master-1.onrender.com/api/plant-types/${id}`;
       const res = await fetch(url, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       fetchAll();

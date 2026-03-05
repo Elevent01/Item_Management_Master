@@ -7,7 +7,7 @@ import BreezCustomFields from "../ItemMasterPages/BreezCustomFields.js";
 // import SonataCustomFields removed for build fix
 // import SweetNutritionCustomFields removed for build fix
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 // ==================== MAIN INFO MASTER COMPONENT WITH RBAC ====================
 const InfoMaster = () => {

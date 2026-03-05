@@ -29,7 +29,7 @@ import ExcelColumnCalculator from "./ExcelColumnCalculator";
 // useState is shared from the React import above — ColumnPanel uses it too
 
 // ── Backend URL ────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8000";
+const API_BASE = "https://item-management-master-1.onrender.com";
 
 const COLORS = {
   bg:         "#0f1117",

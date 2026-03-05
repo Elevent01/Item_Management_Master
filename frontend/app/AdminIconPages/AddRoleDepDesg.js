@@ -38,7 +38,7 @@ export default function AddRoleDepDesg() {
 
   const fetchCompanies = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/companies");
+      const response = await fetch("https://item-management-master-1.onrender.com/api/companies");
       const data = await response.json();
       setCompanies(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -74,11 +74,11 @@ export default function AddRoleDepDesg() {
         let url = "";
         
         if (field === 'role') {
-          url = `http://localhost:8000/api/roles?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/roles?q=${encodeURIComponent(query)}`;
         } else if (field === 'department') {
-          url = `http://localhost:8000/api/departments?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/departments?q=${encodeURIComponent(query)}`;
         } else if (field === 'designation') {
-          url = `http://localhost:8000/api/designations?q=${encodeURIComponent(query)}`;
+          url = `https://item-management-master-1.onrender.com/api/designations?q=${encodeURIComponent(query)}`;
         }
         
         const data = await fetch(url).then(r => r.json());
@@ -259,7 +259,7 @@ export default function AddRoleDepDesg() {
       if (hasDept) params.append('department_name', autoCapitalize(formData.department_name.trim()));
       if (hasDesg) params.append('designation_name', autoCapitalize(formData.designation_name.trim()));
 
-      const response = await fetch("http://localhost:8000/api/role-access", {
+      const response = await fetch("https://item-management-master-1.onrender.com/api/role-access", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString(),

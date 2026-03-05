@@ -11,7 +11,7 @@ const EmptyPageCreator = () => {
   const [saving, setSaving] = useState(false);
 
   // API URL - adjust according to your backend
-  const API_URL = 'http://localhost:8000/api/pages';
+  const API_URL = 'https://item-management-master-1.onrender.com/api/pages';
 
   // Available config files
   const configFiles = [
@@ -156,7 +156,7 @@ STEP 2: Add this entry to the array:
   // 🆕 NEW: Create link automatically when page is saved
   const createPageLink = async (pageData) => {
     try {
-      const response = await fetch('http://localhost:8000/api/links/create-link', {
+      const response = await fetch('https://item-management-master-1.onrender.com/api/links/create-link', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

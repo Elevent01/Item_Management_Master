@@ -1,5 +1,5 @@
 // app/utils/ocrApi.js - COMPLETE FIXED VERSION
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://item-management-master-1.onrender.com/api';
 
 // ==================== OCR API ====================
 export const ocrApi = {

@@ -16,8 +16,8 @@ const IconPageCreator = () => {
   const [editingIcon, setEditingIcon] = useState(null);
   const [editDisplayName, setEditDisplayName] = useState('');
 
-  const API_BASE = 'http://localhost:8000/api/icons';
-  const CONFIGS_API = 'http://localhost:8000/api/configs';
+  const API_BASE = 'https://item-management-master-1.onrender.com/api/icons';
+  const CONFIGS_API = 'https://item-management-master-1.onrender.com/api/configs';
 
   const CREATED_ICONS_KEY = 'iconPageCreatorIcons';
 

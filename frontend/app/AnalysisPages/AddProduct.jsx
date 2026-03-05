@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Factory, Package, Search, Eye, Trash2, CheckCircle, XCircle, AlertCircle, Loader, Grid, List, Plus, Save, Info, Globe, Layers, Tag, Box } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
 
 export default function AddProduct() {
   const [loading, setLoading] = useState(false);

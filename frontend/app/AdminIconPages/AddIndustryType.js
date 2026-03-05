@@ -21,7 +21,7 @@ export default function AddIndustryType() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("http://localhost:8000/api/industry-types");
+      const response = await fetch("https://item-management-master-1.onrender.com/api/industry-types");
       if (!response.ok) {
         throw new Error("Failed to load industry types. Please check backend connection.");
       }
@@ -74,8 +74,8 @@ export default function AddIndustryType() {
       const industry_code = generateIndustryCode(formData.industry_name);
       
       const url = editingId 
-        ? `http://localhost:8000/api/industry-types/${editingId}`
-        : "http://localhost:8000/api/industry-types";
+        ? `https://item-management-master-1.onrender.com/api/industry-types/${editingId}`
+        : "https://item-management-master-1.onrender.com/api/industry-types";
       
       const method = editingId ? "PUT" : "POST";
       
@@ -126,7 +126,7 @@ export default function AddIndustryType() {
       setLoading(true);
       console.log("🗑️ Deleting industry type ID:", id);
       
-      const response = await fetch(`http://localhost:8000/api/industry-types/${id}`, {
+      const response = await fetch(`https://item-management-master-1.onrender.com/api/industry-types/${id}`, {
         method: "DELETE",
       });
 

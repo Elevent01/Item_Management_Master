@@ -135,12 +135,12 @@ const UserAddResetPassword = () => {
     if (!userId) return;
     
     try {
-      const fpResponse = await fetch(`http://localhost:8000/api/biometric/fingerprint/user/${userId}`);
+      const fpResponse = await fetch(`https://item-management-master-1.onrender.com/api/biometric/fingerprint/user/${userId}`);
       if (fpResponse.ok) {
         const fpData = await fpResponse.json();
         setEnrolledFingerprints(fpData);
       }
-      const faceResponse = await fetch(`http://localhost:8000/api/biometric/face/user/${userId}`);
+      const faceResponse = await fetch(`https://item-management-master-1.onrender.com/api/biometric/face/user/${userId}`);
       if (faceResponse.ok) {
         const faceData = await faceResponse.json();
         setEnrolledFaces(faceData);
@@ -176,7 +176,7 @@ const UserAddResetPassword = () => {
       
       console.log(`🔐 Updating password for User ID: ${userId}`);
       
-      const response = await fetch('http://localhost:8000/api/users/update-password', {
+      const response = await fetch('https://item-management-master-1.onrender.com/api/users/update-password', {
         method: 'POST',
         body: formData
       });
@@ -241,7 +241,7 @@ const UserAddResetPassword = () => {
       }));
       formData.append('ip_address', 'localhost');
 
-      const res = await fetch('http://localhost:8000/api/biometric/fingerprint/verify-live', {
+      const res = await fetch('https://item-management-master-1.onrender.com/api/biometric/fingerprint/verify-live', {
         method: 'POST',
         body: formData,
       });
@@ -263,7 +263,7 @@ const UserAddResetPassword = () => {
   const deleteFingerprint = async (fingerprintId) => {
     if (!confirm('Are you sure you want to delete this fingerprint?')) return;
     try {
-      const response = await fetch(`http://localhost:8000/api/biometric/fingerprint/${fingerprintId}?user_id=${userId}`, { 
+      const response = await fetch(`https://item-management-master-1.onrender.com/api/biometric/fingerprint/${fingerprintId}?user_id=${userId}`, { 
         method: 'DELETE' 
       });
       if (response.ok) {
@@ -382,7 +382,7 @@ const UserAddResetPassword = () => {
       formData.append('video_frame', capturedImage);
       formData.append('ip_address', 'localhost');
       
-      const response = await fetch('http://localhost:8000/api/biometric/face/enroll-live', {
+      const response = await fetch('https://item-management-master-1.onrender.com/api/biometric/face/enroll-live', {
         method: 'POST',
         body: formData
       });
@@ -409,7 +409,7 @@ const UserAddResetPassword = () => {
   const deleteFace = async (faceId) => {
     if (!confirm('Are you sure you want to delete this face image?')) return;
     try {
-      const response = await fetch(`http://localhost:8000/api/biometric/face/${faceId}?user_id=${userId}`, { 
+      const response = await fetch(`https://item-management-master-1.onrender.com/api/biometric/face/${faceId}?user_id=${userId}`, { 
         method: 'DELETE' 
       });
       if (response.ok) {
