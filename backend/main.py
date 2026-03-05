@@ -33,15 +33,11 @@ from productClassification import product_models
 from financeAccounting.finance_routes import router as finance_router
 from financeAccounting import finance_models
 
-<<<<<<< Updated upstream
 # ✅ Import Sonata Custom Fields System
 from sonataCustomFields.sonata_custom_router import router as sonata_custom_router
 from sonataCustomFields import sonata_custom_models
 
 # 🚀 Import Page Creation System
-=======
-# 🚀 Import Page Creation System (No Database Required)
->>>>>>> Stashed changes
 from autoCreation.page_creation_routes import router as page_creation_router
 from autoCreation.page_links_routes import router as page_links_router
 from autoCreation.config_file_routes import router as config_file_router
@@ -50,17 +46,13 @@ from autoCreation.icon_creator_backend import router as icon_creator_router
 # ✅ Excel Importer
 from services.excel_importer import router as excel_router
 
-<<<<<<< Updated upstream
 # Create tables
-=======
-# Create tables (this will now include UOM, Category, Product Classification & Finance tables)
->>>>>>> Stashed changes
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="🏢 RBAC + Biometric + Category + Product + Finance + Page Creation + Icon Creator System",
-    description="Complete System with Authentication, Authorization, UOM, Category, Product Classification, Finance, Automated Page Creation & Icon Management",
-    version="12.0.0"
+    title="🏢 RBAC + Biometric + Category + Product + Finance + Sonata Custom Fields + Page Creation + Icon Creator System",
+    description="Complete System with Authentication, Authorization, UOM, Category, Product Classification, Finance, Sonata Custom Fields, Automated Page Creation & Icon Management",
+    version="13.0.0"
 )
 
 # CORS
@@ -88,6 +80,7 @@ app.include_router(uom_router, prefix="/api", tags=["📏 UOM System"])
 app.include_router(category_router, prefix="/api", tags=["📂 Category Management"])
 app.include_router(product_router, prefix="/api", tags=["📦 Product Classification"])
 app.include_router(finance_router, prefix="/api", tags=["💰 Finance & Accounting"])
+app.include_router(sonata_custom_router, prefix="/api", tags=["🗂️ Sonata Custom Fields"])
 app.include_router(page_creation_router, prefix="/api/pages", tags=["🚀 Page Creation System"])
 app.include_router(page_links_router, prefix="/api/links", tags=["🔗 Page Links Management"])
 app.include_router(config_file_router, prefix="/api/configs", tags=["⚙️ Config File Management"])
@@ -98,8 +91,8 @@ app.include_router(excel_router, tags=["📊 Excel / CSV Importer"])
 @app.get("/")
 def read_root():
     return {
-        "message": "🏢 Complete RBAC + Biometric + UOM + Category + Product + Finance + Page Creation + Icon Creator System",
-        "version": "12.0.0",
+        "message": "🏢 Complete RBAC + Biometric + UOM + Category + Product + Finance + Sonata Custom Fields + Page Creation + Icon Creator System",
+        "version": "13.0.0",
         "status": "operational",
         "features": [
             "✅ User Authentication with Token Management",
@@ -112,6 +105,7 @@ def read_root():
             "✅ Advanced Category Management",
             "✅ Product Classification System",
             "✅ Finance & Accounting Module",
+            "✅ Sonata Custom Fields Module",
             "✅ Automated Page Creation & Management",
             "✅ Icon Page Creator with Auto-Registration"
         ],
@@ -123,7 +117,7 @@ def read_root():
 def health_check():
     return {
         "status": "healthy",
-        "version": "12.0.0",
+        "version": "13.0.0",
         "modules": {
             "authentication": True,
             "authorization": True,
@@ -133,6 +127,7 @@ def health_check():
             "category_management": True,
             "product_classification": True,
             "finance_accounting": True,
+            "sonata_custom_fields": True,
             "page_creation": True,
             "icon_creator": True
         }
