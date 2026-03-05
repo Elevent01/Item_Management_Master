@@ -4,7 +4,8 @@ import { Candy, Info, Music, Package, PlusCircle, Wind, Warehouse, FileBox, Doll
 // Import the components
 import ItemInfoMaster from "../ItemMasterPages/ItemInfoMaster.js";
 import BreezCustomFields from "../ItemMasterPages/BreezCustomFields.js";
-import SonataCustomFields from "../ItemMasterPages/SonataCustomFields.js";
+// ⚠️ SonataCustomFields - dynamic import only (missing on some deployments)
+// import SonataCustomFields from "../ItemMasterPages/SonataCustomFields.js"; // REMOVED - causes crash
 import SonataItemCapacityPage from "../SonataCustomFields/SonataItemCapacityPage.js";
 import SonataItemGradePage from "../SonataCustomFields/SonataItemGradePage.js";
 import SweetNutritionCustomFields from "../ItemMasterPages/SweetNutritionCustomFields.js";
@@ -18,6 +19,9 @@ import RenderItemMasterSalesAndFinance from "../ItemMasterPages/RenderItemMaster
 import ItemMasterWarehouseDetails from "../ItemMasterPages/ItemMasterWarehouseDetails.js";
 import ItemMasterPurchaseDetails from "../ItemMasterPages/ItemMasterPurchaseDetails.js";
 import RenderItemMasterWarehouseAndPurchase from "../ItemMasterPages/RenderItemMasterWarehouseAndPurchase.js";
+
+// Placeholder for SonataCustomFields - loaded dynamically in InfoMaster.js
+const SonataCustomFieldsPlaceholder = () => null;
 
 export const itemMasterLinks = [
   { 
@@ -38,7 +42,7 @@ export const itemMasterLinks = [
     name: "Sonata Custom Fields", 
     icon: Music, 
     path: "sonata-custom-fields",
-    component: SonataCustomFields,
+    component: SonataCustomFieldsPlaceholder, // ✅ Dynamic load via InfoMaster.js
     description: "Configure Sonata custom fields for batch requirements, capacity, and item grades"
   },
   { 
