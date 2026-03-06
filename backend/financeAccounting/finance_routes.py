@@ -666,11 +666,11 @@ async def get_user_companies_with_plants(user_id: int, db: Session = Depends(get
 
 @router.post("/gl-accounts", response_model=dict)
 async def create_gl_account(
-    gl_code: str = Form(...),
     gl_name: str = Form(...),
     company_id: int = Form(...),
-    plant_id: Optional[int] = Form(None),
     gl_type_id: int = Form(...),
+    gl_code: Optional[str] = Form(None),
+    plant_id: Optional[int] = Form(None),
     gl_sub_type_id: Optional[int] = Form(None),
     gl_category_id: Optional[int] = Form(None),
     gl_sub_category_id: Optional[int] = Form(None),
@@ -682,8 +682,7 @@ async def create_gl_account(
     user_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
-    """Create new GL Account — supports full 5-level hierarchy including GL Head"""
-    gl_code = gl_code.strip().upper()
+    """Create new GL Account — gl_code is optional; auto-generated as COMPANY_CODE-GLXXXX-0001 if blank"""
     gl_name = capitalize_properly(gl_name)
 
     if not check_user_company_access(db, user_id, company_id):
@@ -705,6 +704,27 @@ async def create_gl_account(
     if gl_head_id:
         if not db.query(fin_models.GLHead).filter(fin_models.GLHead.id == gl_head_id).first():
             raise HTTPException(status_code=404, detail="GL Head not found")
+
+    # ── Auto-generate GL Code if not provided ──────────────────────────────
+    if gl_code and gl_code.strip():
+        gl_code = gl_code.strip().upper()
+    else:
+        # Pattern: COMPANY_CODE-GLXXXX-0001  (XXXX = first 4 alpha chars of gl_name)
+        comp_code = (company.company_code or "CO").upper()
+        alpha = "".join(c for c in gl_name.upper() if c.isalpha())
+        name_base = (alpha[:4]).ljust(4, "X")
+        prefix = f"{comp_code}-GL{name_base}-"
+        counter = 1
+        while True:
+            candidate = f"{prefix}{counter:04d}"
+            if not db.query(fin_models.GLMaster).filter(
+                fin_models.GLMaster.company_id == company_id,
+                fin_models.GLMaster.gl_code == candidate
+            ).first():
+                gl_code = candidate
+                break
+            counter += 1
+
     existing = db.query(fin_models.GLMaster).filter(fin_models.GLMaster.company_id == company_id, fin_models.GLMaster.gl_code == gl_code).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"GL Code '{gl_code}' already exists for this company")
