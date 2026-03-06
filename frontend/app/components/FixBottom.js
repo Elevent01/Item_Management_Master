@@ -5,7 +5,7 @@ import { X, Lock, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useEffect, useState } from "react";
 
-const API_BASE = 'https://item-management-master-1.onrender.com/api';
+import { getAccessiblePathsSet } from "../utils/rbacCache";
 
 export default function FixBottom() {
   const { leftWidth, isDraggingLeft, tabs, removeTab, activeTab, setActiveTab, isLeftPanelOpen, setShowAddCompany } = usePanelWidth();
@@ -16,12 +16,12 @@ export default function FixBottom() {
   const [accessiblePaths, setAccessiblePaths] = useState(new Set());
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
 
-  // 🔥 NEW: Load accessible pages on mount
+  // Load accessible paths — uses shared rbacCache (no new API call if already fetched by LeftPanel)
   useEffect(() => {
     loadAccessiblePages();
   }, []);
 
-  // 🔥 NEW: Auto-remove tabs that lost access
+  // Auto-remove tabs that lost access
   useEffect(() => {
     if (isCheckingAccess || accessiblePaths.size === 0) return;
 
@@ -42,87 +42,16 @@ export default function FixBottom() {
     });
   }, [tabs, accessiblePaths, isCheckingAccess]);
 
-  // 🔥 Load accessible pages from backend
+  // Uses shared cache — no duplicate API call
   const loadAccessiblePages = async () => {
     try {
       setIsCheckingAccess(true);
-
-      const storedUser = sessionStorage.getItem('userData');
-      if (!storedUser) {
-        console.warn('⚠️ [TAB] No user data');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      const parsed = JSON.parse(storedUser);
-      let user = parsed?.user;
-
-      if (!user || !user.id) {
-        console.error('❌ [TAB] Invalid user data');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      // Fetch user details if accesses missing
-      if (!user.accesses || user.accesses.length === 0) {
-        const userDetailsRes = await fetch(`${API_BASE}/users/${user.id}`);
-        if (userDetailsRes.ok) {
-          user = await userDetailsRes.json();
-          parsed.user = user;
-          sessionStorage.setItem('userData', JSON.stringify(parsed));
-        }
-      }
-
-      if (!user.accesses || user.accesses.length === 0) {
-        console.error('❌ [TAB] No company access');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      const primaryAccess = user.accesses.find(acc => acc.is_primary_company) || user.accesses[0];
-      const primaryCompanyId = primaryAccess.company?.id;
-
-      if (!primaryCompanyId) {
-        console.error('❌ [TAB] No company ID');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      // Fetch accessible menu
-      const menuUrl = `${API_BASE}/rbac/users/${user.id}/accessible-menu?company_id=${primaryCompanyId}`;
-      const menuRes = await fetch(menuUrl);
-
-      if (!menuRes.ok) {
-        console.error('❌ [TAB] Failed to fetch menu');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      const menuJson = await menuRes.json();
-
-      // Flatten all accessible page paths
-      const paths = new Set();
-      const flattenPages = (pages) => {
-        pages.forEach(page => {
-          if (page.page_url) {
-            paths.add(page.page_url);
-          }
-          if (page.children && page.children.length > 0) {
-            flattenPages(page.children);
-          }
-        });
-      };
-
-      if (menuJson.menu && menuJson.menu.length > 0) {
-        flattenPages(menuJson.menu);
-      }
-
+      const paths = await getAccessiblePathsSet();
       console.log('✅ [TAB] Accessible paths loaded:', paths.size);
       setAccessiblePaths(paths);
-      setIsCheckingAccess(false);
-
     } catch (error) {
       console.error('❌ [TAB] Error loading access:', error);
+    } finally {
       setIsCheckingAccess(false);
     }
   };
