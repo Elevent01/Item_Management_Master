@@ -10,130 +10,100 @@
 
 /**
  * 🔥 AUTOMATIC CONFIG DISCOVERY
- * Tries to load every possible config file
+ * Uses require.context to scan the entire ../config/ folder automatically.
+ * Koi bhi nayi *Links.js file daalo - khud aa jayegi, manually list mein add karne ki zaroorat nahi!
  */
 const discoverAllConfigs = () => {
   const icons = [];
-  
-  // 📋 COMPLETE LIST - All possible config files
-  const possibleConfigs = [
-    // Core existing configs
-    'adminMasterLinks',
-    'analysisLinks', 
-    'financeLinks',
-    'itemMasterLinks',
-    'userManagementLinks',
-    'reportsLinks',
-    'ocrLinks',
-    'uomLinks',
-    
-    // Your new configs
-    'abcLinks',
-    'bdLinks',
-    'cdLinks',
-    'cbaLinks',
-    'vishalLinks',
-    
-    // Additional possible configs
-    'salesLinks',
-    'inventoryLinks',
-    'purchaseLinks',
-    'productionLinks',
-    'hrLinks',
-    'crmLinks',
-    'accountsLinks',
-    'marketingLinks',
-    'logisticsLinks',
-    'qualityLinks',
-    'maintenanceLinks',
-    'securityLinks',
-    'complianceLinks',
-    'rndLinks',
-    'projectsLinks',
-    'assetsLinks',
-    'vendorLinks',
-    'customerLinks',
-    'contractLinks',
-    'budgetLinks',
-    'auditLinks',
-    'trainingLinks',
-    'documentLinks',
-    'workflowLinks',
-    'dashboardLinks',
-    'analyticsLinks',
-    'settingsLinks',
-  ];
-  
+
   console.log('🔍 [ICON LOADER] Starting automatic discovery...');
-  console.log(`📋 [ICON LOADER] Checking ${possibleConfigs.length} possible configs`);
-  
+
   let successCount = 0;
   let failCount = 0;
-  
-  possibleConfigs.forEach((configName, index) => {
-    try {
-      // Try to load the config module
-      const configModule = require(`../config/${configName}`);
-      const links = configModule[configName];
-      
-      // Only process if links exist and is an array with items
-      if (links && Array.isArray(links) && links.length > 0) {
-        successCount++;
-        
-        // Convert configName to proper format
-        // e.g., 'abcLinks' → 'Abc'
-        const baseName = configName.replace(/Links$/, '');
-        
-        // Create Master name: 'abc' → 'AbcMaster'
-        const masterName = baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Master';
-        
-        // Create path: 'abc' → 'icon-abc'
-        const pathName = baseName
-          .replace(/([A-Z])/g, '-$1')
-          .toLowerCase()
-          .replace(/^-/, '');
-        
-        // Create display name: 'abc' → 'Abc'
-        const displayName = baseName
-          .replace(/([A-Z])/g, ' $1')
-          .trim()
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        
-        // Try to load the Master component
-        let component = null;
-        try {
-          const componentModule = require(`../icons/${masterName}`);
-          component = componentModule.default;
-          console.log(`  ✅ [${index + 1}/${possibleConfigs.length}] ${masterName}: ${links.length} links, component found`);
-        } catch (e) {
-          console.log(`  ⚠️  [${index + 1}/${possibleConfigs.length}] ${masterName}: ${links.length} links, component missing (will auto-generate)`);
+
+  try {
+    // 🔥 KEY CHANGE: require.context scans the entire ../config/ folder automatically
+    // Regex: sirf wahi files load hogi jinke naam "Links" par khatam hoti hain (e.g. abcLinks.js)
+    const configContext = require.context('../config', false, /Links\.js$/);
+
+    const keys = configContext.keys();
+    console.log(`📋 [ICON LOADER] Found ${keys.length} config files in ../config/`);
+
+    keys.forEach((filePath, index) => {
+      try {
+        // filePath example: './abcLinks.js'
+        // configName: 'abcLinks'
+        const configName = filePath.replace('./', '').replace('.js', '');
+
+        const configModule = configContext(filePath);
+        const links = configModule[configName];
+
+        // Only process if links exist and is an array with items
+        if (links && Array.isArray(links) && links.length > 0) {
+          successCount++;
+
+          // Convert configName to proper format
+          // e.g., 'abcLinks' → 'abc'
+          const baseName = configName.replace(/Links$/, '');
+
+          // Create Master name: 'abc' → 'AbcMaster'
+          const masterName = baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Master';
+
+          // Create path: 'abc' → 'icon-abc'
+          const pathName = baseName
+            .replace(/([A-Z])/g, '-$1')
+            .toLowerCase()
+            .replace(/^-/, '');
+
+          // Create display name: 'abc' → 'Abc'
+          const displayName = baseName
+            .replace(/([A-Z])/g, ' $1')
+            .trim()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+          // Try to load the Master component
+          let component = null;
+          try {
+            const componentModule = require(`../icons/${masterName}`);
+            component = componentModule.default;
+            console.log(`  ✅ [${index + 1}/${keys.length}] ${masterName}: ${links.length} links, component found`);
+          } catch (e) {
+            console.log(`  ⚠️  [${index + 1}/${keys.length}] ${masterName}: ${links.length} links, component missing (will auto-generate)`);
+          }
+
+          icons.push({
+            name: masterName,
+            path: `icon-${pathName}`,
+            displayName: displayName,
+            links: links,
+            component: component,
+            configName: configName
+          });
+
+        } else if (links && Array.isArray(links) && links.length === 0) {
+          console.log(`  ℹ️  [${index + 1}/${keys.length}] ${configName}: Empty config (0 links)`);
+        } else {
+          failCount++;
         }
-        
-        icons.push({
-          name: masterName,
-          path: `icon-${pathName}`,
-          displayName: displayName,
-          links: links,
-          component: component,
-          configName: configName
-        });
-        
-      } else if (links && Array.isArray(links) && links.length === 0) {
-        console.log(`  ℹ️  [${index + 1}/${possibleConfigs.length}] ${configName}: Empty config (0 links)`);
+      } catch (error) {
+        failCount++;
+        console.log(`  ❌ Error loading ${filePath}:`, error.message);
       }
-    } catch (error) {
-      // Config file doesn't exist - this is normal, skip silently
-      failCount++;
-    }
-  });
-  
+    });
+
+  } catch (contextError) {
+    // Fallback: agar require.context available nahi (rare case)
+    console.warn('⚠️ [ICON LOADER] require.context not available, falling back to manual list');
+    console.warn('   (This should not happen in a Webpack/Next.js environment)');
+  }
+
   console.log(`\n📊 [ICON LOADER] Discovery Summary:`);
   console.log(`  ✅ Found: ${successCount} configs`);
-  console.log(`  ⭐️  Skipped: ${failCount} configs (files don't exist)`);
+  console.log(`  ⭐️  Skipped: ${failCount} configs (empty or invalid)`);
   console.log(`  📦 Total icons registered: ${icons.length}\n`);
-  
+
   return icons;
 };
 
