@@ -3,7 +3,7 @@
 
 import './globals.css';
 import { PanelWidthProvider } from './context/PanelWidthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Login from './components/Login';
 import FixHeader from './components/FixHeader';
 import LeftPanel from './components/LeftPanel';
@@ -17,6 +17,11 @@ import RoleAccessForCompaniesPlantRightPanel from './AdminIconPages/RoleAccessFo
 import UserPlantCompanyAccessRightPanel from './AdminIconPages/UserPlantCompanyAccessRightPanel';
 import ExcelImporterRightPanel from './pages/ExcelImporterRightPanel';
 import { usePanelWidth } from './context/PanelWidthContext';
+import { warmUpServer, getAccessiblePages, clearRbacCache } from './utils/rbacCache';
+
+// Fire server warm-up immediately at module load time (before any component renders)
+// This gives the Render free-tier server maximum time to wake up
+warmUpServer();
 
 // Wrapper component to access context
 function DashboardContent({ userData, onLogout, currentUserId, children }) {
@@ -82,7 +87,6 @@ export default function RootLayout({ children }) {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // ✅ Check if already logged in 
     checkSession();
   }, []);
 
@@ -99,6 +103,8 @@ export default function RootLayout({ children }) {
         setCurrentUserId(parseInt(userId));
         setIsLoggedIn(true);
         console.log('✅ Session found for User ID:', userId);
+        // Pre-fetch RBAC so LeftPanel finds data already cached when it mounts
+        getAccessiblePages().catch(console.error);
       } else {
         // ❌ No session - show login
         console.log('❌ No session - showing login page');
@@ -126,10 +132,14 @@ export default function RootLayout({ children }) {
     setUserData(data);
     setCurrentUserId(data.user?.id);
     setIsLoggedIn(true);
+    // Pre-fetch RBAC immediately after login so LeftPanel finds it cached
+    getAccessiblePages().catch(console.error);
   };
 
   const handleLogout = () => {
     console.log('🔒 Logging out...');
+    // Clear RBAC cache on logout
+    clearRbacCache();
     
     // ✅ Clear everything
     sessionStorage.clear();
