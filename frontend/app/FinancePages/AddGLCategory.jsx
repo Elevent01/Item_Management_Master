@@ -429,7 +429,7 @@ export default function AddGLCategory() {
         <div style={{ padding: '0 14px', height: '34px', background: `linear-gradient(135deg,${COLOR},${COLOR_MED})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Tag size={14} />
-            <span style={{ fontWeight: '700', fontSize: '12px' }}>🏷️ GL Category &amp; Sub-Category Management</span>
+            <span style={{ fontWeight: '700', fontSize: '12px' }}>🏷️ GL Category &amp; Sub-Category Management ( Reporting Head / Line Item  & Sub-line Item / Break-up / Schedule Head )</span>
           </div>
           <div style={{ display: 'flex', gap: '6px' }}>
             <button
@@ -816,7 +816,7 @@ export default function AddGLCategory() {
       {/* ══════════════════ IMPORT SELECTOR MODAL ════════════════════════ */}
       {showGLTypeSelector && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'white', borderRadius: '10px', boxShadow: '0 12px 40px rgba(0,0,0,0.25)', width: '580px', maxWidth: '95vw', overflow: 'hidden' }}>
+          <div style={{ background: 'white', borderRadius: '10px', boxShadow: '0 12px 40px rgba(0,0,0,0.25)', width: '580px', maxWidth: '95vw', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
             {/* Modal header */}
             <div style={{ padding: '10px 14px', background: `linear-gradient(135deg,${COLOR},${COLOR_MED})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -828,7 +828,7 @@ export default function AddGLCategory() {
               </button>
             </div>
 
-            <div style={{ padding: '16px' }}>
+            <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
 
               {/* Step A — GL Type */}
               <p style={{ fontSize: '10px', fontWeight: '700', color: '#374151', margin: '0 0 6px' }}>

@@ -43,7 +43,7 @@ class GLSubType(Base):
     # Parent GL Type
     gl_type_id = Column(Integer, ForeignKey("gl_type_master.id"), nullable=False)
     
-    display_order = Column(Integer, nullable=True)          # For ordered display in reports
+    display_order = Column(Integer, nullable=True)
     
     is_active = Column(Boolean, default=True, nullable=False)
     
@@ -71,10 +71,7 @@ class GLCategory(Base):
     category_name = Column(String(150), nullable=False, unique=True)
     description = Column(Text, nullable=True)
     
-    # GL Type link - e.g., ASSET, LIABILITY, INCOME, EXPENSE
     gl_type_id = Column(Integer, ForeignKey("gl_type_master.id"), nullable=False)
-    
-    # GL Sub-Type link (optional but recommended)
     gl_sub_type_id = Column(Integer, ForeignKey("gl_sub_type_master.id"), nullable=True)
     
     is_active = Column(Boolean, default=True, nullable=False)
@@ -90,21 +87,19 @@ class GLCategory(Base):
     gl_accounts = relationship("GLMaster", back_populates="gl_category")
 
 
-
-
 # ==================== GL SUB CATEGORY MASTER ====================
 class GLSubCategory(Base):
     """GL Sub-Category Master — child of GLCategory"""
     __tablename__ = "gl_sub_category_master"
 
-    id               = Column(Integer, primary_key=True, autoincrement=True)
+    id                = Column(Integer, primary_key=True, autoincrement=True)
     sub_category_code = Column(String(80), nullable=False, unique=True, index=True)
     sub_category_name = Column(String(150), nullable=False, unique=True)
-    description      = Column(Text, nullable=True)
+    description       = Column(Text, nullable=True)
 
-    gl_type_id       = Column(Integer, ForeignKey("gl_type_master.id"),     nullable=False)
-    gl_sub_type_id   = Column(Integer, ForeignKey("gl_sub_type_master.id"), nullable=True)
-    gl_category_id   = Column(Integer, ForeignKey("gl_category_master.id"), nullable=False)
+    gl_type_id        = Column(Integer, ForeignKey("gl_type_master.id"),     nullable=False)
+    gl_sub_type_id    = Column(Integer, ForeignKey("gl_sub_type_master.id"), nullable=True)
+    gl_category_id    = Column(Integer, ForeignKey("gl_category_master.id"), nullable=False)
 
     is_active  = Column(Boolean, default=True, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -116,6 +111,42 @@ class GLSubCategory(Base):
     gl_type     = relationship("GLType",     foreign_keys=[gl_type_id])
     gl_sub_type = relationship("GLSubType",  foreign_keys=[gl_sub_type_id])
     gl_category = relationship("GLCategory", foreign_keys=[gl_category_id], backref="sub_categories")
+    gl_heads    = relationship("GLHead", back_populates="gl_sub_category")
+
+
+# ==================== GL HEAD MASTER ====================
+class GLHead(Base):
+    """
+    GL Head Master — Level 5 in hierarchy
+    Type → SubType → Category → SubCategory → GL HEAD
+    Also called: Account Head / Narration Head / Posting Head
+    """
+    __tablename__ = "gl_head_master"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    gl_head_code = Column(String(120), nullable=False, unique=True, index=True)
+    gl_head_name = Column(String(200), nullable=False, unique=True)
+    description  = Column(Text, nullable=True)
+
+    # Full hierarchy linkage
+    gl_type_id         = Column(Integer, ForeignKey("gl_type_master.id"),         nullable=False)
+    gl_sub_type_id     = Column(Integer, ForeignKey("gl_sub_type_master.id"),     nullable=True)
+    gl_category_id     = Column(Integer, ForeignKey("gl_category_master.id"),     nullable=False)
+    gl_sub_category_id = Column(Integer, ForeignKey("gl_sub_category_master.id"), nullable=False)
+
+    is_active  = Column(Boolean, default=True, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    gl_type         = relationship("GLType",        foreign_keys=[gl_type_id])
+    gl_sub_type     = relationship("GLSubType",     foreign_keys=[gl_sub_type_id])
+    gl_category     = relationship("GLCategory",    foreign_keys=[gl_category_id])
+    gl_sub_category = relationship("GLSubCategory", back_populates="gl_heads")
+    gl_accounts     = relationship("GLMaster",      back_populates="gl_head")
+
 
 # ==================== GL MASTER (Core - SAP FI Level) ====================
 class GLMaster(Base):
@@ -129,28 +160,25 @@ class GLMaster(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     
-    # Company & Plant Support (same as Category system)
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=True, index=True)
+    plant_id   = Column(Integer, ForeignKey("plants.id",   ondelete="CASCADE"), nullable=True,  index=True)
     
-    # GL Details
-    gl_code = Column(String(50), nullable=False, index=True)
+    gl_code = Column(String(50),  nullable=False, index=True)
     gl_name = Column(String(200), nullable=False)
     
-    # Classification
-    gl_type_id = Column(Integer, ForeignKey("gl_type_master.id"), nullable=False)
-    gl_sub_type_id = Column(Integer, ForeignKey("gl_sub_type_master.id"), nullable=True)
-    gl_category_id = Column(Integer, ForeignKey("gl_category_master.id"), nullable=True)
+    # Classification — full hierarchy
+    gl_type_id         = Column(Integer, ForeignKey("gl_type_master.id"),         nullable=False)
+    gl_sub_type_id     = Column(Integer, ForeignKey("gl_sub_type_master.id"),     nullable=True)
+    gl_category_id     = Column(Integer, ForeignKey("gl_category_master.id"),     nullable=True)
+    gl_sub_category_id = Column(Integer, ForeignKey("gl_sub_category_master.id"), nullable=True)
+    gl_head_id         = Column(Integer, ForeignKey("gl_head_master.id"),         nullable=True)   # ← NEW
     
-    # Hierarchy Support (Chart of Accounts)
-    parent_gl_id = Column(Integer, ForeignKey("gl_master.id"), nullable=True)
+    parent_gl_id  = Column(Integer, ForeignKey("gl_master.id"), nullable=True)
     
-    # Posting Controls
-    is_postable = Column(Boolean, default=True, nullable=False)  # Can transactions be posted?
-    currency_code = Column(String(10), nullable=True)  # Multi-currency support
+    is_postable   = Column(Boolean, default=True, nullable=False)
+    currency_code = Column(String(10), nullable=True)
     
-    # Status & Metadata
-    remarks = Column(Text, nullable=True)
+    remarks   = Column(Text,    nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -163,15 +191,16 @@ class GLMaster(Base):
     )
     
     # Relationships
-    company = relationship("Company", foreign_keys=[company_id])
-    plant = relationship("Plant", foreign_keys=[plant_id])
-    gl_type = relationship("GLType", back_populates="gl_accounts")
-    gl_sub_type = relationship("GLSubType", foreign_keys=[gl_sub_type_id])
-    gl_category = relationship("GLCategory", back_populates="gl_accounts")
-    parent_gl = relationship("GLMaster", remote_side=[id], backref="child_gls")
+    company         = relationship("Company",       foreign_keys=[company_id])
+    plant           = relationship("Plant",         foreign_keys=[plant_id])
+    gl_type         = relationship("GLType",        back_populates="gl_accounts")
+    gl_sub_type     = relationship("GLSubType",     foreign_keys=[gl_sub_type_id])
+    gl_category     = relationship("GLCategory",    back_populates="gl_accounts")
+    gl_sub_category = relationship("GLSubCategory", foreign_keys=[gl_sub_category_id])
+    gl_head         = relationship("GLHead",        back_populates="gl_accounts")   # ← NEW
+    parent_gl       = relationship("GLMaster",      remote_side=[id], backref="child_gls")
     
-    # History
-    name_history = relationship("GLNameHistory", back_populates="gl_account", cascade="all, delete-orphan")
+    name_history   = relationship("GLNameHistory",   back_populates="gl_account", cascade="all, delete-orphan")
     status_history = relationship("GLStatusHistory", back_populates="gl_account", cascade="all, delete-orphan")
 
 
@@ -180,7 +209,7 @@ class GLNameHistory(Base):
     """Track GL Account name changes (SAP-style audit)"""
     __tablename__ = "gl_name_history"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id    = Column(Integer, primary_key=True, autoincrement=True)
     gl_id = Column(Integer, ForeignKey("gl_master.id", ondelete="CASCADE"), nullable=False)
     
     old_name = Column(String(200), nullable=False)
@@ -188,9 +217,8 @@ class GLNameHistory(Base):
     
     changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     changed_at = Column(DateTime(timezone=True), server_default=func.now())
-    reason = Column(Text, nullable=True)
+    reason     = Column(Text, nullable=True)
     
-    # Relationships
     gl_account = relationship("GLMaster", back_populates="name_history")
 
 
@@ -199,7 +227,7 @@ class GLStatusHistory(Base):
     """Track GL Account block/unblock changes"""
     __tablename__ = "gl_status_history"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id    = Column(Integer, primary_key=True, autoincrement=True)
     gl_id = Column(Integer, ForeignKey("gl_master.id", ondelete="CASCADE"), nullable=False)
     
     old_status = Column(Boolean, nullable=False)
@@ -207,32 +235,24 @@ class GLStatusHistory(Base):
     
     changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     changed_at = Column(DateTime(timezone=True), server_default=func.now())
-    reason = Column(Text, nullable=True)
+    reason     = Column(Text, nullable=True)
     
-    # Relationships
     gl_account = relationship("GLMaster", back_populates="status_history")
 
 
 # ==================== ITEM INFO MASTER (GL Reference) ====================
 class ItemInfoMaster(Base):
-    """
-    Item Master with GL Mapping
-    - References GL Master for accounting integration
-    - Supports stock/non-stock items
-    """
+    """Item Master with GL Mapping"""
     __tablename__ = "item_info_master"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id         = Column(Integer, primary_key=True, autoincrement=True)
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     
     item_code = Column(String(100), nullable=False, index=True)
     item_name = Column(String(200), nullable=False)
     
-    # GL Mapping (Core Integration)
-    gl_id = Column(Integer, ForeignKey("gl_master.id"), nullable=False)
-    
-    # Item Classification
-    is_stock = Column(Boolean, default=True, nullable=False)
+    gl_id     = Column(Integer, ForeignKey("gl_master.id"), nullable=False)
+    is_stock  = Column(Boolean, default=True, nullable=False)
     
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -243,6 +263,5 @@ class ItemInfoMaster(Base):
         UniqueConstraint('company_id', 'item_code', name='unique_item_company_code'),
     )
     
-    # Relationships
-    company = relationship("Company")
+    company    = relationship("Company")
     gl_account = relationship("GLMaster")

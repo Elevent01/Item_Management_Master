@@ -6,7 +6,7 @@ import { Home, Search, Layout, ChevronRight, ChevronDown, Grid } from "lucide-re
 import { usePanelWidth } from "../context/PanelWidthContext";
 import { adminMasterLinks } from "../config/adminMasterLinks";
 import { getAllIconPages } from "../utils/iconLoader";
-import { filterLinksByAccess, filterIconPages } from "../utils/rbacLinkFilter";
+import { filterLinks, filterIconPagesFromCache } from "../utils/rbacCache";
 
 export default function LeftPanel() {
   const { leftWidth, setLeftWidth, isDraggingLeft, setIsDraggingLeft, addTab, isLeftPanelOpen, setShowAddCompany } = usePanelWidth();
@@ -69,23 +69,24 @@ export default function LeftPanel() {
       if (!currentUser) return;
       
       setFilterLoading(true);
-      console.log('🔍 Applying RBAC filters...');
+      console.log('🔍 Applying RBAC filters via shared cache...');
       
       try {
-        // Filter Admin Master Links
-        const filteredAdmin = await filterLinksByAccess(adminMasterLinks);
-        setFilteredAdminLinks(filteredAdmin);
-        console.log('✅ Filtered Admin Links:', filteredAdmin.length);
-        
-        // Filter Icon Pages (with nested links)
         const iconPagesOriginal = getAllIconPages();
-        const filteredIcons = await filterIconPages(iconPagesOriginal);
+
+        // Run both filters in parallel — they share the same underlying cache fetch
+        const [filteredAdmin, filteredIcons] = await Promise.all([
+          filterLinks(adminMasterLinks),
+          filterIconPagesFromCache(iconPagesOriginal),
+        ]);
+
+        setFilteredAdminLinks(filteredAdmin);
         setFilteredIconPages(filteredIcons);
+        console.log('✅ Filtered Admin Links:', filteredAdmin.length);
         console.log('✅ Filtered Icon Pages:', filteredIcons.length);
         
       } catch (error) {
         console.error('❌ Filter error:', error);
-        // On error, show no links (safe fallback)
         setFilteredAdminLinks([]);
         setFilteredIconPages([]);
       }

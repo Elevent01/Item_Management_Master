@@ -1,14 +1,15 @@
 // app/config/financeLinks.js
-import { BarChart3, Building2, CreditCard, DollarSign, FileText, TrendingUp } from "lucide-react";
+import { BarChart3, Building2, CreditCard, DollarSign, FileText, TrendingUp, Bookmark } from "lucide-react";
 
 // Import the components
 import AddGLType from "../FinancePages/AddGLType";
 import AddGLCategory from "../FinancePages/AddGLCategory";
 import AddGLMaster from "../FinancePages/AddGLMaster";
 import AddItemInfo from "../FinancePages/AddItemInfo";
+import AddGLHead from "../FinancePages/AddGLHead";
 
 export const financeLinks = [
-{ 
+  { 
     name: "GL Type", 
     icon: FileText, 
     path: "gl-type",
@@ -21,6 +22,13 @@ export const financeLinks = [
     path: "gl-category",
     component: AddGLCategory,
     description: "Create and manage GL categories for classification"
+  },
+  { 
+    name: "GL Head", 
+    icon: Bookmark, 
+    path: "gl-head",
+    component: AddGLHead,
+    description: "Create and manage GL heads with hierarchy mapping"
   },
   { 
     name: "GL Master", 

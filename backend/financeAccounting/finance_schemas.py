@@ -50,21 +50,18 @@ class GLSubTypeResponse(GLSubTypeBase):
 
 # ==================== BULK CREATE SCHEMAS ====================
 class GLTypeBulkItem(BaseModel):
-    """Single GL Type entry in bulk create"""
     type_name: str = Field(..., max_length=100)
     description: Optional[str] = None
 
 
 class GLSubTypeBulkItem(BaseModel):
-    """Single GL Sub-Type entry in bulk create"""
     sub_type_name: str = Field(..., max_length=150)
     description: Optional[str] = None
-    gl_type_id: int                          # Map to existing type
+    gl_type_id: int
     display_order: Optional[int] = None
 
 
 class BulkCreateRequest(BaseModel):
-    """Bulk create GL Types + GL Sub-Types in one call"""
     user_id: int
     gl_types: Optional[List[GLTypeBulkItem]] = []
     gl_sub_types: Optional[List[GLSubTypeBulkItem]] = []
@@ -105,8 +102,6 @@ class GLCategoryResponse(GLCategoryBase):
         from_attributes = True
 
 
-
-
 # ==================== GL SUB CATEGORY SCHEMAS ====================
 class GLSubCategoryBase(BaseModel):
     sub_category_name: str = Field(..., max_length=150)
@@ -135,6 +130,39 @@ class GLSubCategoryResponse(GLSubCategoryBase):
     class Config:
         from_attributes = True
 
+
+# ==================== GL HEAD SCHEMAS ====================
+class GLHeadBase(BaseModel):
+    gl_head_name: str = Field(..., max_length=200)
+    description: Optional[str] = None
+    gl_type_id: int
+    gl_sub_type_id: Optional[int] = None
+    gl_category_id: int
+    gl_sub_category_id: int
+
+
+class GLHeadCreate(GLHeadBase):
+    pass
+
+
+class GLHeadResponse(GLHeadBase):
+    id: int
+    gl_head_code: str
+    is_active: bool
+    created_at: datetime
+    gl_type_code: Optional[str] = None
+    gl_type_name: Optional[str] = None
+    gl_sub_type_code: Optional[str] = None
+    gl_sub_type_name: Optional[str] = None
+    gl_category_code: Optional[str] = None
+    gl_category_name: Optional[str] = None
+    gl_sub_category_code: Optional[str] = None
+    gl_sub_category_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ==================== GL MASTER SCHEMAS ====================
 class GLMasterBase(BaseModel):
     gl_code: str = Field(..., max_length=50)
@@ -142,6 +170,8 @@ class GLMasterBase(BaseModel):
     gl_type_id: int
     gl_sub_type_id: Optional[int] = None
     gl_category_id: Optional[int] = None
+    gl_sub_category_id: Optional[int] = None
+    gl_head_id: Optional[int] = None          # ← NEW
     parent_gl_id: Optional[int] = None
     is_postable: bool = True
     currency_code: Optional[str] = None
@@ -166,12 +196,13 @@ class GLMasterResponse(GLMasterBase):
 
 
 class GLMasterDetail(GLMasterResponse):
-    """Detailed GL with relationships"""
     company: dict
     plant: Optional[dict] = None
     gl_type: dict
     gl_sub_type: Optional[dict] = None
     gl_category: Optional[dict] = None
+    gl_sub_category: Optional[dict] = None
+    gl_head: Optional[dict] = None            # ← NEW
     parent_gl: Optional[dict] = None
     child_count: int = 0
     
@@ -227,7 +258,6 @@ class ItemInfoResponse(ItemInfoBase):
 
 
 class ItemInfoDetail(ItemInfoResponse):
-    """Detailed Item with GL info"""
     company: dict
     gl_account: dict
     

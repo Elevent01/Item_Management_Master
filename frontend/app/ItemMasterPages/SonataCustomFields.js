@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 
-const API_BASE = '/api';
-const USER_ID  = 1; // replace with your auth context user id
+const API_BASE = 'https://item-management-master-1.onrender.com/api';
+
+// Get USER_ID from session
+const getSessionUserId = () => {
+  try {
+    const stored = sessionStorage.getItem('userData');
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    return parsed?.user?.id || null;
+  } catch {
+    return null;
+  }
+};
 
 // ─── Custom Field Value Modal (popup list from API only) ─────────────────────
 const CustomFieldValueModal = ({ fieldKey, title, onSelect, onClose }) => {
@@ -16,7 +27,8 @@ const CustomFieldValueModal = ({ fieldKey, title, onSelect, onClose }) => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const params = new URLSearchParams({ user_id: USER_ID, field_key: fieldKey, is_active: 'true' });
+        const userId = getSessionUserId();
+        const params = new URLSearchParams({ user_id: userId, field_key: fieldKey, is_active: 'true' });
         const res  = await fetch(`${API_BASE}/sonata-custom-fields/values?${params}`);
         const json = await res.json();
         setData(json.data || []);

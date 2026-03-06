@@ -5,7 +5,7 @@ import { X, Lock, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useEffect, useState } from "react";
 
-const API_BASE = 'https://item-management-master-1.onrender.com/api';
+import { getAccessiblePathsSet } from "../utils/rbacCache";
 
 export default function FixBottom() {
   const { leftWidth, isDraggingLeft, tabs, removeTab, activeTab, setActiveTab, isLeftPanelOpen, setShowAddCompany } = usePanelWidth();
@@ -42,87 +42,16 @@ export default function FixBottom() {
     });
   }, [tabs, accessiblePaths, isCheckingAccess]);
 
-  // 🔥 Load accessible pages from backend
+  // Uses shared cache — no duplicate API call
   const loadAccessiblePages = async () => {
     try {
       setIsCheckingAccess(true);
-
-      const storedUser = sessionStorage.getItem('userData');
-      if (!storedUser) {
-        console.warn('⚠️ [TAB] No user data');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      const parsed = JSON.parse(storedUser);
-      let user = parsed?.user;
-
-      if (!user || !user.id) {
-        console.error('❌ [TAB] Invalid user data');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      // Fetch user details if accesses missing
-      if (!user.accesses || user.accesses.length === 0) {
-        const userDetailsRes = await fetch(`${API_BASE}/users/${user.id}`);
-        if (userDetailsRes.ok) {
-          user = await userDetailsRes.json();
-          parsed.user = user;
-          sessionStorage.setItem('userData', JSON.stringify(parsed));
-        }
-      }
-
-      if (!user.accesses || user.accesses.length === 0) {
-        console.error('❌ [TAB] No company access');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      const primaryAccess = user.accesses.find(acc => acc.is_primary_company) || user.accesses[0];
-      const primaryCompanyId = primaryAccess.company?.id;
-
-      if (!primaryCompanyId) {
-        console.error('❌ [TAB] No company ID');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      // Fetch accessible menu
-      const menuUrl = `${API_BASE}/rbac/users/${user.id}/accessible-menu?company_id=${primaryCompanyId}`;
-      const menuRes = await fetch(menuUrl);
-
-      if (!menuRes.ok) {
-        console.error('❌ [TAB] Failed to fetch menu');
-        setIsCheckingAccess(false);
-        return;
-      }
-
-      const menuJson = await menuRes.json();
-
-      // Flatten all accessible page paths
-      const paths = new Set();
-      const flattenPages = (pages) => {
-        pages.forEach(page => {
-          if (page.page_url) {
-            paths.add(page.page_url);
-          }
-          if (page.children && page.children.length > 0) {
-            flattenPages(page.children);
-          }
-        });
-      };
-
-      if (menuJson.menu && menuJson.menu.length > 0) {
-        flattenPages(menuJson.menu);
-      }
-
+      const paths = await getAccessiblePathsSet();
       console.log('✅ [TAB] Accessible paths loaded:', paths.size);
       setAccessiblePaths(paths);
-      setIsCheckingAccess(false);
-
     } catch (error) {
       console.error('❌ [TAB] Error loading access:', error);
+    } finally {
       setIsCheckingAccess(false);
     }
   };
@@ -222,6 +151,126 @@ export default function FixBottom() {
             </button>
           )}
 
+          {/* FIXED HOME TAB - always visible, never scrolls away */}
+          {tabs.filter(t => t.path === "/").map((tab) => (
+            <div
+              key={tab.id}
+              onClick={() => handleTabClick(tab)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "6px 10px",
+                background: activeTab === tab.id
+                  ? "linear-gradient(135deg, #87CEEB 0%, #FFD700 100%)"
+                  : "linear-gradient(135deg, #72777cff 0%, #53253bff 100%)",
+                color: activeTab === tab.id ? "#333" : "white",
+                borderRadius: "6px",
+                cursor: isLeftPanelOpen ? "pointer" : "not-allowed",
+                fontSize: "12px",
+                fontWeight: "500",
+                whiteSpace: "nowrap",
+                transition: "all 0.15s ease",
+                minWidth: "fit-content",
+                border: activeTab === tab.id ? "1px solid #FFD700" : "1px solid #53253bff",
+                opacity: isLeftPanelOpen ? 1 : 0.7,
+                pointerEvents: isLeftPanelOpen ? "auto" : "none",
+                flexShrink: 0,
+                marginRight: "4px",
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== tab.id && isLeftPanelOpen) e.currentTarget.style.opacity = "0.9";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== tab.id && isLeftPanelOpen) e.currentTarget.style.opacity = "1";
+              }}
+            >
+              <span style={{ whiteSpace: "nowrap" }}>{tab.title}</span>
+            </div>
+          ))}
+
+          {/* Divider between fixed Home and scrollable tabs */}
+          {tabs.some(t => t.path === "/") && tabs.length > 1 && (
+            <div style={{
+              width: "1px",
+              height: "24px",
+              background: "#aaa",
+              flexShrink: 0,
+              marginRight: "4px",
+            }} />
+          )}
+
+          {/* FIXED ACTIVE TAB - always visible next to Home, hidden from scroll area */}
+          {(() => {
+            const activeTabData = tabs.find(t => t.id === activeTab && t.path !== "/");
+            if (!activeTabData) return null;
+            return (
+              <>
+                <div
+                  onClick={() => handleTabClick(activeTabData)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "6px",
+                    padding: "6px 8px",
+                    background: "linear-gradient(135deg, #87CEEB 0%, #FFD700 100%)",
+                    color: "#333",
+                    borderRadius: "6px",
+                    cursor: isLeftPanelOpen ? "pointer" : "not-allowed",
+                    fontSize: "12px",
+                    fontWeight: "500",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s ease",
+                    width: "140px",
+                    minWidth: "140px",
+                    maxWidth: "140px",
+                    border: "1px solid #FFD700",
+                    opacity: isLeftPanelOpen ? 1 : 0.7,
+                    pointerEvents: isLeftPanelOpen ? "auto" : "none",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{
+                    flex: 1,
+                    textAlign: "center",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}>{activeTabData.title}</span>
+                  <button
+                    onClick={(e) => handleCloseTab(e, activeTabData.id)}
+                    disabled={!isLeftPanelOpen}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      cursor: isLeftPanelOpen ? "pointer" : "not-allowed",
+                      padding: "2px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: "3px",
+                      color: "#ff4444",
+                      transition: "all 0.15s ease",
+                      opacity: isLeftPanelOpen ? 1 : 0.5,
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (isLeftPanelOpen) e.currentTarget.style.background = "rgba(255,68,68,0.2)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (isLeftPanelOpen) e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+                <div style={{ width: "1px", height: "24px", background: "#aaa", flexShrink: 0, marginRight: "4px" }} />
+              </>
+            );
+          })()}
+
+          {/* SCROLLABLE TABS - all except Home */}
           <div
             ref={scrollContainerRef}
             style={{
@@ -259,16 +308,17 @@ export default function FixBottom() {
               </div>
             )}
 
-            {/* 🔥 TABS - 15 per frame, same size, updated colors */}
-            {tabs.map((tab) => (
+            {/* 🔥 SCROLLABLE TABS - all except Home and currently active tab (active is shown fixed) */}
+            {tabs.filter(tab => tab.path !== "/" && tab.id !== activeTab).map((tab) => (
               <div
                 key={tab.id}
                 onClick={() => handleTabClick(tab)}
                 style={{
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "space-between",
                   gap: "6px",
-                  padding: "6px 10px",
+                  padding: "6px 8px",
                   background: activeTab === tab.id 
                     ? "linear-gradient(135deg, #87CEEB 0%, #FFD700 100%)" 
                     : "linear-gradient(135deg, #72777cff 0%, #53253bff 100%)",
@@ -279,9 +329,9 @@ export default function FixBottom() {
                   fontWeight: "500",
                   whiteSpace: "nowrap",
                   transition: "all 0.15s ease",
-                  minWidth: "fit-content",
-                  maxWidth: "fit-content",
-                  width: "auto",
+                  width: "140px",
+                  minWidth: "140px",
+                  maxWidth: "140px",
                   border: activeTab === tab.id ? "1px solid #FFD700" : "1px solid #53253bff",
                   opacity: isLeftPanelOpen ? 1 : 0.7,
                   pointerEvents: isLeftPanelOpen ? "auto" : "none",
@@ -298,14 +348,13 @@ export default function FixBottom() {
                   }
                 }}
               >
-                <span
-                  style={{
-                    whiteSpace: "nowrap",
-                    flex: 1,
-                  }}
-                >
-                  {tab.title}
-                </span>
+                <span style={{
+                  flex: 1,
+                  textAlign: "center",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>{tab.title}</span>
                 <button
                   onClick={(e) => handleCloseTab(e, tab.id)}
                   disabled={!isLeftPanelOpen}
@@ -318,14 +367,14 @@ export default function FixBottom() {
                     alignItems: "center",
                     justifyContent: "center",
                     borderRadius: "3px",
-                    color: activeTab === tab.id ? "#333" : "white",
+                    color: "#ff4444",
                     transition: "all 0.15s ease",
                     opacity: isLeftPanelOpen ? 1 : 0.5,
                     flexShrink: 0,
                   }}
                   onMouseEnter={(e) => {
                     if (isLeftPanelOpen) {
-                      e.currentTarget.style.background = activeTab === tab.id ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.2)";
+                      e.currentTarget.style.background = "rgba(255,68,68,0.2)";
                     }
                   }}
                   onMouseLeave={(e) => {

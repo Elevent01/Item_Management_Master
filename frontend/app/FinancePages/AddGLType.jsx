@@ -583,7 +583,7 @@ export default function AddGLType() {
         <div style={{ padding: '0 16px', height: '36px', background: `linear-gradient(135deg,${COLOR},${COLOR_MED})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Layers size={14} />
-            <span style={{ fontWeight: '700', fontSize: '12px' }}>GL Type & Sub-Type Management</span>
+            <span style={{ fontWeight: '700', fontSize: '12px' }}>GL Type & Sub-Type Management (Financial Statement Element & Classification - "Liquidity / Nature / Function")</span>
             <span style={{ fontSize: '9px', opacity: 0.75 }}>IFRS + Indian Companies Act</span>
           </div>
           <div style={{ display: 'flex', gap: '6px' }}>
