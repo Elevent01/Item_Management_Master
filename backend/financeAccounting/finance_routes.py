@@ -1,7 +1,7 @@
 """financeAccounting/finance_routes.py - Finance & Accounting API Routes"""
 from fastapi import APIRouter, HTTPException, Depends, Form, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, text
 from typing import List, Optional
 import re
 
@@ -12,6 +12,28 @@ from financeAccounting import finance_schemas as schemas
 from user import user_models
 
 router = APIRouter()
+
+
+# ==================== DB COLUMN SAFETY HELPERS ====================
+# gl_master.gl_head_id and gl_sub_category_id may not exist yet if migration
+# hasn't run.  We check once per process and cache the result.
+
+_gl_master_cols: Optional[set] = None
+
+def _get_gl_master_cols(db: Session) -> set:
+    global _gl_master_cols
+    if _gl_master_cols is None:
+        try:
+            rows = db.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='gl_master'")
+            ).fetchall()
+            _gl_master_cols = {r[0] for r in rows}
+        except Exception:
+            _gl_master_cols = set()
+    return _gl_master_cols
+
+def _has_col(db: Session, col: str) -> bool:
+    return col in _get_gl_master_cols(db)
 
 
 # ==================== UTILITY FUNCTIONS ====================
@@ -690,11 +712,15 @@ async def create_gl_account(
     gl_account = fin_models.GLMaster(
         company_id=company_id, plant_id=plant_id, gl_code=gl_code, gl_name=gl_name,
         gl_type_id=gl_type_id, gl_sub_type_id=gl_sub_type_id, gl_category_id=gl_category_id,
-        gl_sub_category_id=gl_sub_category_id, gl_head_id=gl_head_id,
         parent_gl_id=parent_gl_id, is_postable=is_postable,
         currency_code=currency_code.strip().upper() if currency_code else None,
         remarks=remarks.strip() if remarks else None, created_by=user_id
     )
+    # Only assign new columns if they exist in the actual DB table
+    if _has_col(db, "gl_sub_category_id") and gl_sub_category_id:
+        gl_account.gl_sub_category_id = gl_sub_category_id
+    if _has_col(db, "gl_head_id") and gl_head_id:
+        gl_account.gl_head_id = gl_head_id
     db.add(gl_account); db.commit(); db.refresh(gl_account)
     scope = "Company-wide" if not plant_id else f"Plant: {plant.plant_name if plant else ''}"
     return {"message": "GL Account created successfully", "gl_id": gl_account.id, "gl_code": gl_account.gl_code, "gl_name": gl_account.gl_name, "company_name": company.company_name, "scope": scope}
@@ -716,17 +742,29 @@ async def get_gl_accounts_by_user(
     if not accessible_companies:
         return {"gl_accounts": [], "total": 0}
 
+    # Only joinedload new columns if they actually exist in the DB table
+    _has_head    = _has_col(db, "gl_head_id")
+    _has_sub_cat = _has_col(db, "gl_sub_category_id")
+
+    eager_loads = [
+        joinedload(fin_models.GLMaster.company),
+        joinedload(fin_models.GLMaster.plant),
+        joinedload(fin_models.GLMaster.gl_type),
+        joinedload(fin_models.GLMaster.gl_sub_type),
+        joinedload(fin_models.GLMaster.gl_category),
+        joinedload(fin_models.GLMaster.parent_gl),
+    ]
+    if _has_sub_cat:
+        eager_loads.append(joinedload(fin_models.GLMaster.gl_sub_category))
+    if _has_head:
+        eager_loads.append(joinedload(fin_models.GLMaster.gl_head))
+
     query = db.query(fin_models.GLMaster).filter(
         or_(
             and_(fin_models.GLMaster.company_id.in_(accessible_companies), fin_models.GLMaster.plant_id.is_(None)),
             fin_models.GLMaster.plant_id.in_(accessible_plants) if accessible_plants else False
         )
-    ).options(
-        joinedload(fin_models.GLMaster.company), joinedload(fin_models.GLMaster.plant),
-        joinedload(fin_models.GLMaster.gl_type), joinedload(fin_models.GLMaster.gl_sub_type),
-        joinedload(fin_models.GLMaster.gl_category), joinedload(fin_models.GLMaster.parent_gl),
-        joinedload(fin_models.GLMaster.gl_head),
-    )
+    ).options(*eager_loads)
     if company_id:
         query = query.filter(fin_models.GLMaster.company_id == company_id)
     if plant_id:
@@ -744,6 +782,22 @@ async def get_gl_accounts_by_user(
     result = []
     for gl in gl_accounts:
         child_count = db.query(func.count(fin_models.GLMaster.id)).filter(fin_models.GLMaster.parent_gl_id == gl.id).scalar()
+
+        # Safe access — only read new columns if they exist
+        gl_head_data = None
+        if _has_head:
+            try:
+                gl_head_data = {"id": gl.gl_head.id, "gl_head_code": gl.gl_head.gl_head_code, "gl_head_name": gl.gl_head.gl_head_name} if gl.gl_head else None
+            except Exception:
+                pass
+
+        gl_sub_cat_data = None
+        if _has_sub_cat:
+            try:
+                gl_sub_cat_data = {"id": gl.gl_sub_category.id, "sub_category_code": gl.gl_sub_category.sub_category_code, "sub_category_name": gl.gl_sub_category.sub_category_name} if gl.gl_sub_category else None
+            except Exception:
+                pass
+
         result.append({
             "id": gl.id, "gl_code": gl.gl_code, "gl_name": gl.gl_name,
             "company": {"id": gl.company.id, "name": gl.company.company_name, "code": gl.company.company_code},
@@ -751,7 +805,8 @@ async def get_gl_accounts_by_user(
             "gl_type": {"id": gl.gl_type.id, "type_code": gl.gl_type.type_code, "type_name": gl.gl_type.type_name},
             "gl_sub_type": {"id": gl.gl_sub_type.id, "sub_type_code": gl.gl_sub_type.sub_type_code, "sub_type_name": gl.gl_sub_type.sub_type_name} if gl.gl_sub_type else None,
             "gl_category": {"id": gl.gl_category.id, "category_code": gl.gl_category.category_code, "category_name": gl.gl_category.category_name} if gl.gl_category else None,
-            "gl_head": {"id": gl.gl_head.id, "gl_head_code": gl.gl_head.gl_head_code, "gl_head_name": gl.gl_head.gl_head_name} if gl.gl_head else None,
+            "gl_sub_category": gl_sub_cat_data,
+            "gl_head": gl_head_data,
             "parent_gl": {"id": gl.parent_gl.id, "gl_code": gl.parent_gl.gl_code, "gl_name": gl.parent_gl.gl_name} if gl.parent_gl else None,
             "is_postable": gl.is_postable, "currency_code": gl.currency_code,
             "scope": "Company-wide" if not gl.plant_id else "Plant-specific",
@@ -791,9 +846,9 @@ async def update_gl_account(
         gl.gl_sub_type_id = gl_sub_type_id
     if gl_category_id is not None:
         gl.gl_category_id = gl_category_id
-    if gl_sub_category_id is not None:
+    if gl_sub_category_id is not None and _has_col(db, "gl_sub_category_id"):
         gl.gl_sub_category_id = gl_sub_category_id
-    if gl_head_id is not None:
+    if gl_head_id is not None and _has_col(db, "gl_head_id"):
         gl.gl_head_id = gl_head_id
     if is_postable is not None:
         gl.is_postable = is_postable
