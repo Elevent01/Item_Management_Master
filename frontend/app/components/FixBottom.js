@@ -308,8 +308,8 @@ export default function FixBottom() {
               </div>
             )}
 
-            {/* 🔥 SCROLLABLE TABS - all tabs except Home */}
-            {tabs.filter(tab => tab.path !== "/").map((tab) => (
+            {/* 🔥 SCROLLABLE TABS - all except Home and currently active tab (active is shown fixed) */}
+            {tabs.filter(tab => tab.path !== "/" && tab.id !== activeTab).map((tab) => (
               <div
                 key={tab.id}
                 onClick={() => handleTabClick(tab)}
