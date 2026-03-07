@@ -33,6 +33,10 @@ from productClassification import product_models
 from financeAccounting.finance_routes import router as finance_router
 from financeAccounting import finance_models
 
+# ✅ Import Finance Reports (GL Mapping & Framework Builder)
+from financeAccounting.finance_reports_routes import router as finance_reports_router
+from financeAccounting import finance_report_models
+
 # ✅ Import Sonata Custom Fields System
 from sonataCustomFields.sonata_custom_router import router as sonata_custom_router
 from sonataCustomFields import sonata_custom_models
@@ -80,6 +84,7 @@ app.include_router(uom_router, prefix="/api", tags=["📏 UOM System"])
 app.include_router(category_router, prefix="/api", tags=["📂 Category Management"])
 app.include_router(product_router, prefix="/api", tags=["📦 Product Classification"])
 app.include_router(finance_router, prefix="/api", tags=["💰 Finance & Accounting"])
+app.include_router(finance_reports_router, prefix="/api", tags=["📊 Finance Reports & GL Mapping"])
 app.include_router(sonata_custom_router, prefix="/api", tags=["🗂️ Sonata Custom Fields"])
 app.include_router(page_creation_router, prefix="/api/pages", tags=["🚀 Page Creation System"])
 app.include_router(page_links_router, prefix="/api/links", tags=["🔗 Page Links Management"])
