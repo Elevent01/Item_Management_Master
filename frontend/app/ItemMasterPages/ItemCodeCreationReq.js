@@ -442,6 +442,47 @@ const ItemCodeCreationReq = () => {
     </div>
   );
 
+  // ── image upload helper (converts file to base64 data URL for preview, stores as URL in form) ──
+  const handleImageUpload = (fieldKey, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setForm(f => ({ ...f, [fieldKey]: e.target.result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const imageUploadField = (label, urlKey) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: 11, color: '#000', fontWeight: 500 }}>{label}</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          value={form[urlKey]}
+          onChange={e => setForm(f => ({ ...f, [urlKey]: e.target.value }))}
+          placeholder="https://… ya file upload karein"
+          style={{ flex: 1, padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000' }}
+        />
+        <label style={{ cursor: 'pointer', padding: '4px 8px', background: '#3b82f6', color: '#fff', borderRadius: 3, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+          <Upload size={11} />
+          Upload
+          <input type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => { if (e.target.files[0]) handleImageUpload(urlKey, e.target.files[0]); }} />
+        </label>
+      </div>
+      {form[urlKey] && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+          <img src={form[urlKey]} alt={label}
+            onError={e => { e.target.style.display = 'none'; }}
+            style={{ width: 56, height: 56, objectFit: 'cover', border: '1px solid #d1d5db', borderRadius: 4 }} />
+          <button onClick={() => setForm(f => ({ ...f, [urlKey]: '' }))}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 10 }}>
+            <X size={13} /> Hatao
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   const renderForm = () => (
     <div className="w-full h-full bg-white rounded-lg shadow-md flex flex-col overflow-hidden">
       {/* Header */}
@@ -455,7 +496,24 @@ const ItemCodeCreationReq = () => {
       {/* Form body */}
       <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
 
-        {/* ── Section 1: Basic Info ── */}
+        {/* ── Section 1: Company / Plant (FIRST) ── */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 10 }}>
+            🏢 Company & Plant (Based on Your Access)
+          </div>
+          {optionsLoading ? (
+            <div style={{ fontSize: 11, color: '#6b7280', padding: 8 }}>Loading your company access…</div>
+          ) : companyOptions.length === 0 ? (
+            <div style={{ fontSize: 11, color: '#dc2626', padding: 8 }}>⚠️ No company access found. Contact administrator.</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
+              {lovField('Company', 'company_label', 'company', true)}
+              {lovField('Plant', 'plant_label', 'plant')}
+            </div>
+          )}
+        </div>
+
+        {/* ── Section 2: Basic Info ── */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 10 }}>
             📝 Basic Item Information
@@ -475,57 +533,21 @@ const ItemCodeCreationReq = () => {
           </div>
         </div>
 
-        {/* ── Section 2: Company / Plant ── */}
+        {/* ── Section 3: Optional Documents / Images ── */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 10 }}>
-            🏢 Company & Plant (Based on Your Access)
+            📎 Optional Documents & Images (URL ya Upload – DB mein sirf URL store hoga)
           </div>
-          {optionsLoading ? (
-            <div style={{ fontSize: 11, color: '#6b7280', padding: 8 }}>Loading your company access…</div>
-          ) : companyOptions.length === 0 ? (
-            <div style={{ fontSize: 11, color: '#dc2626', padding: 8 }}>⚠️ No company access found. Contact administrator.</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
-              {lovField('Company', 'company_label', 'company', true)}
-              {lovField('Plant', 'plant_label', 'plant')}
-            </div>
-          )}
-        </div>
-
-        {/* ── Section 3: Optional Documents / URLs ── */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 10 }}>
-            📎 Optional Documents (URL Links – no file stored in DB)
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+            {imageUploadField('Reference Image', 'ref_image_url')}
+            {imageUploadField('Sample Photo', 'sample_photo_url')}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
-            {inp('Reference Image URL', 'ref_image_url',    { placeholder: 'https://…' })}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginTop: 8 }}>
             {inp('Vendor Quotation URL', 'vendor_quot_url', { placeholder: 'https://…' })}
-            {inp('Sample Photo URL', 'sample_photo_url',    { placeholder: 'https://…' })}
             {inp('Product Link', 'product_link',            { placeholder: 'https://…' })}
           </div>
-          {/* URL preview thumbnails */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-            {[
-              { label: 'Ref Image',    url: form.ref_image_url },
-              { label: 'Sample Photo', url: form.sample_photo_url },
-            ].map(({ label, url }) => url ? (
-              <div key={label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 9, color: '#6b7280', marginBottom: 4 }}>{label}</div>
-                <img src={url} alt={label}
-                  onError={e => { e.target.style.display = 'none'; }}
-                  style={{ width: 60, height: 60, objectFit: 'cover', border: '1px solid #d1d5db', borderRadius: 4 }} />
-              </div>
-            ) : null)}
-          </div>
         </div>
 
-        {/* Creator info (read-only display) */}
-        {user && (
-          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 4, padding: '8px 12px', fontSize: 10, color: '#6b7280' }}>
-            🔐 This request will be saved as created by: <strong style={{ color: '#374151' }}>{user.full_name || user.username || `User #${user.id}`}</strong>
-            {' '}(role, department & designation will be auto-captured from your profile)
-          </div>
-        )}
       </div>
 
       {/* Actions */}
