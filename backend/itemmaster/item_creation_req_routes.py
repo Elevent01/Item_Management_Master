@@ -49,50 +49,6 @@ router = APIRouter()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  HELPER  – resolve role / dept / designation for a user
-# ══════════════════════════════════════════════════════════════════════════════
-
-def _resolve_creator_ids(db: Session, user_id: int) -> dict:
-    """
-    Try to pull the user's primary role_id, dept_id, desg_id from
-    user_roles / user_departments / user_designations tables (if they exist).
-    Returns a dict with the three ids (None if not found).
-    """
-    result = {"role_id": None, "dept_id": None, "desg_id": None}
-    try:
-        from sqlalchemy import text
-
-        # role
-        row = db.execute(
-            text("SELECT role_id FROM user_roles WHERE user_id = :uid LIMIT 1"),
-            {"uid": user_id}
-        ).fetchone()
-        if row:
-            result["role_id"] = row[0]
-
-        # department
-        row = db.execute(
-            text("SELECT department_id FROM user_departments WHERE user_id = :uid LIMIT 1"),
-            {"uid": user_id}
-        ).fetchone()
-        if row:
-            result["dept_id"] = row[0]
-
-        # designation
-        row = db.execute(
-            text("SELECT designation_id FROM user_designations WHERE user_id = :uid LIMIT 1"),
-            {"uid": user_id}
-        ).fetchone()
-        if row:
-            result["desg_id"] = row[0]
-
-    except Exception:
-        pass   # tables may not exist in every environment – silently skip
-
-    return result
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 #  1.  GET  companies + plants accessible by the user
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -168,11 +124,6 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
 )
 def create_item_creation_request(payload: ItemBasicInfoCreate, db: Session = Depends(get_db)):
 
-    # Resolve creator role / dept / desg snapshot
-    creator_ids = {"role_id": None, "dept_id": None, "desg_id": None}
-    if payload.created_by:
-        creator_ids = _resolve_creator_ids(db, payload.created_by)
-
     # Create main record
     req = ItemBasicInfoItemMaster(
         item_name         = payload.item_name,
@@ -185,9 +136,6 @@ def create_item_creation_request(payload: ItemBasicInfoCreate, db: Session = Dep
         company_id        = payload.company_id,
         plant_id          = payload.plant_id,
         created_by        = payload.created_by,
-        creator_role_id   = creator_ids["role_id"],
-        creator_dept_id   = creator_ids["dept_id"],
-        creator_desg_id   = creator_ids["desg_id"],
     )
     db.add(req)
     db.flush()   # get req.id before committing
