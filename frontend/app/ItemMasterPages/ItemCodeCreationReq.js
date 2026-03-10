@@ -459,7 +459,7 @@ const ItemCodeCreationReq = () => {
         <input
           value={form[urlKey]}
           onChange={e => setForm(f => ({ ...f, [urlKey]: e.target.value }))}
-          placeholder="https://… ya file upload karein"
+          placeholder="https://… or upload a file"
           style={{ flex: 1, padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000' }}
         />
         <label style={{ cursor: 'pointer', padding: '4px 8px', background: '#3b82f6', color: '#fff', borderRadius: 3, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
@@ -476,7 +476,7 @@ const ItemCodeCreationReq = () => {
             style={{ width: 56, height: 56, objectFit: 'cover', border: '1px solid #d1d5db', borderRadius: 4 }} />
           <button onClick={() => setForm(f => ({ ...f, [urlKey]: '' }))}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 10 }}>
-            <X size={13} /> Hatao
+            <X size={13} /> Remove
           </button>
         </div>
       )}
@@ -536,7 +536,7 @@ const ItemCodeCreationReq = () => {
         {/* ── Section 3: Optional Documents / Images ── */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 10 }}>
-            📎 Optional Documents & Images (URL ya Upload – DB mein sirf URL store hoga)
+            📎 Optional Documents & Images (URL or Upload – only URL stored in DB)
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
             {imageUploadField('Reference Image', 'ref_image_url')}
