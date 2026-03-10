@@ -266,8 +266,4 @@ if (typeof window !== 'undefined') {
     getPages: getAccessiblePages,
   };
   console.log('🔧 [RBAC CACHE] Debug: window._rbacCache available');
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 26a6a6d988853ea366023f361e171aded7fe6042

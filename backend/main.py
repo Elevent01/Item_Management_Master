@@ -33,6 +33,10 @@ from productClassification import product_models
 from financeAccounting.finance_routes import router as finance_router
 from financeAccounting import finance_models
 
+# ✅ Import Finance Reports (GL Mapping & Framework Builder)
+from financeAccounting.finance_reports_routes import router as finance_reports_router
+from financeAccounting import finance_report_models
+
 # ✅ Import Sonata Custom Fields System
 from sonataCustomFields.sonata_custom_router import router as sonata_custom_router
 from sonataCustomFields import sonata_custom_models
@@ -45,6 +49,10 @@ from autoCreation.icon_creator_backend import router as icon_creator_router
 
 # ✅ Excel Importer
 from services.excel_importer import router as excel_router
+
+# ✅ Import Item Master – Item Code Creation Request
+from itemmaster.item_creation_req_routes import router as item_creation_req_router
+from itemmaster import item_creation_req_models
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -80,12 +88,14 @@ app.include_router(uom_router, prefix="/api", tags=["📏 UOM System"])
 app.include_router(category_router, prefix="/api", tags=["📂 Category Management"])
 app.include_router(product_router, prefix="/api", tags=["📦 Product Classification"])
 app.include_router(finance_router, prefix="/api", tags=["💰 Finance & Accounting"])
+app.include_router(finance_reports_router, prefix="/api", tags=["📊 Finance Reports & GL Mapping"])
 app.include_router(sonata_custom_router, prefix="/api", tags=["🗂️ Sonata Custom Fields"])
 app.include_router(page_creation_router, prefix="/api/pages", tags=["🚀 Page Creation System"])
 app.include_router(page_links_router, prefix="/api/links", tags=["🔗 Page Links Management"])
 app.include_router(config_file_router, prefix="/api/configs", tags=["⚙️ Config File Management"])
 app.include_router(icon_creator_router, tags=["🎨 Icon Creator System"])
 app.include_router(excel_router, tags=["📊 Excel / CSV Importer"])
+app.include_router(item_creation_req_router, prefix="/api", tags=["📋 Item Master – Item Code Creation Request"])
 
 
 @app.get("/")
@@ -107,7 +117,8 @@ def read_root():
             "✅ Finance & Accounting Module",
             "✅ Sonata Custom Fields Module",
             "✅ Automated Page Creation & Management",
-            "✅ Icon Page Creator with Auto-Registration"
+            "✅ Icon Page Creator with Auto-Registration",
+            "✅ Item Master – Item Code Creation Request"
         ],
         "docs": "https://item-management-master-1.onrender.com/docs"
     }
@@ -129,7 +140,8 @@ def health_check():
             "finance_accounting": True,
             "sonata_custom_fields": True,
             "page_creation": True,
-            "icon_creator": True
+            "icon_creator": True,
+            "item_code_creation_request": True
         }
     }
 

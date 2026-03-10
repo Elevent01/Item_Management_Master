@@ -18,13 +18,10 @@ import UserPlantCompanyAccessRightPanel from './AdminIconPages/UserPlantCompanyA
 import ExcelImporterRightPanel from './pages/ExcelImporterRightPanel';
 import { usePanelWidth } from './context/PanelWidthContext';
 import { warmUpServer, getAccessiblePages, clearRbacCache } from './utils/rbacCache';
-<<<<<<< HEAD
-=======
 
 // Fire server warm-up immediately at module load time (before any component renders)
 // This gives the Render free-tier server maximum time to wake up
 warmUpServer();
->>>>>>> 26a6a6d988853ea366023f361e171aded7fe6042
 
 // Wrapper component to access context
 function DashboardContent({ userData, onLogout, currentUserId, children }) {
@@ -53,8 +50,6 @@ function DashboardContent({ userData, onLogout, currentUserId, children }) {
     currentTab?.path === "excel-importer" ||
     currentTab?.path?.includes("excel-importer") ||
     currentTab?.path?.includes("excel-csv-detector");
-
-
 
   return (
     <>
@@ -90,12 +85,6 @@ export default function RootLayout({ children }) {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-<<<<<<< HEAD
-    // Wake up Render free-tier server immediately on page load
-    warmUpServer();
-    // ✅ Check if already logged in 
-=======
->>>>>>> 26a6a6d988853ea366023f361e171aded7fe6042
     checkSession();
   }, []);
 

@@ -1,5 +1,5 @@
 // app/config/itemMasterLinks.js
-import { Candy, Info, Music, Package, PlusCircle, Wind, Warehouse, FileBox, DollarSign, TrendingUp, ShoppingCart, Building2 } from "lucide-react";
+import { Candy, Info, Music, Package, PlusCircle, Wind, Warehouse, FileBox, DollarSign, TrendingUp, ShoppingCart, Building2, ClipboardList } from "lucide-react";
 
 // Import the components
 import ItemInfoMaster from "../ItemMasterPages/ItemInfoMaster.js";
@@ -18,6 +18,7 @@ import RenderItemMasterSalesAndFinance from "../ItemMasterPages/RenderItemMaster
 import ItemMasterWarehouseDetails from "../ItemMasterPages/ItemMasterWarehouseDetails.js";
 import ItemMasterPurchaseDetails from "../ItemMasterPages/ItemMasterPurchaseDetails.js";
 import RenderItemMasterWarehouseAndPurchase from "../ItemMasterPages/RenderItemMasterWarehouseAndPurchase.js";
+import ItemCodeCreationReq from "../ItemMasterPages/ItemCodeCreationReq.js";
 
 export const itemMasterLinks = [
   { 
@@ -131,5 +132,12 @@ export const itemMasterLinks = [
     path: "render-item-master-warehouse-purchase",
     component: RenderItemMasterWarehouseAndPurchase,
     description: "Render item master warehouse and purchase details with RBAC access control"
+  },
+  { 
+    name: "Item Code Creation Request", 
+    icon: ClipboardList, 
+    path: "item-code-creation-req",
+    component: ItemCodeCreationReq,
+    description: "Raise and manage item code creation requests with company, plant, and document attachments"
   }
 ];

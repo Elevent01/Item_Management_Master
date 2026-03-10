@@ -7,6 +7,7 @@ import AddGLCategory from "../FinancePages/AddGLCategory";
 import AddGLMaster from "../FinancePages/AddGLMaster";
 import AddItemInfo from "../FinancePages/AddItemInfo";
 import AddGLHead from "../FinancePages/AddGLHead";
+import FinanceReports from "../FinancePages/FinanceReports";
 
 export const financeLinks = [
   { 
@@ -48,7 +49,7 @@ export const financeLinks = [
     name: "Finance Reports", 
     icon: BarChart3, 
     path: "finance-reports",
-    component: null,
+    component: FinanceReports,
     description: "View financial reports and analytics"
   },
   { 
