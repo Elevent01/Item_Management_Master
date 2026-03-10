@@ -334,14 +334,14 @@ const ItemCodeCreationReq = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f9fafb', zIndex: 1 }}>
               <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                {['#', 'Item Name', 'Short Name', 'Item Type', 'Department', 'Company', 'Plant', 'Req. Date', 'Status', 'Actions'].map(h => (
+                {['#', 'Item Name', 'Short Name', 'Item Type', 'Department', 'Company', 'Plant', 'Req. Date', 'Ref. Image', 'Status', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '7px 8px', textAlign: 'left', fontWeight: 600, color: '#374151', borderRight: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 11 }}>No records found.</td></tr>
+                <tr><td colSpan={11} style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 11 }}>No records found.</td></tr>
               ) : filtered.map((rec, idx) => (
                 <tr key={rec.id} style={{ borderBottom: '1px solid #f3f4f6' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#f0f9ff'}
@@ -354,6 +354,16 @@ const ItemCodeCreationReq = () => {
                   <td style={{ padding: '6px 8px', borderRight: '1px solid #f3f4f6' }}>{rec.company?.company_name || '—'}</td>
                   <td style={{ padding: '6px 8px', borderRight: '1px solid #f3f4f6' }}>{rec.plant?.plant_name || '—'}</td>
                   <td style={{ padding: '6px 8px', borderRight: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>{rec.required_date || '—'}</td>
+                  <td style={{ padding: '4px 8px', borderRight: '1px solid #f3f4f6' }}>
+                    {rec.optional_documents?.reference_image_url ? (
+                      <img
+                        src={rec.optional_documents.reference_image_url}
+                        alt="Ref"
+                        onError={e => { e.target.style.display = 'none'; }}
+                        style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 3, border: '1px solid #d1d5db', display: 'block' }}
+                      />
+                    ) : <span style={{ color: '#9ca3af' }}>—</span>}
+                  </td>
                   <td style={{ padding: '6px 8px', borderRight: '1px solid #f3f4f6' }}>
                     <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 500, background: rec.is_active ? '#d1fae5' : '#fee2e2', color: rec.is_active ? '#065f46' : '#991b1b' }}>
                       {rec.is_active ? 'Active' : 'Inactive'}
