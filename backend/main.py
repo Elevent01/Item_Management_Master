@@ -54,6 +54,10 @@ from services.excel_importer import router as excel_router
 from itemmaster.item_creation_req_routes import router as item_creation_req_router
 from itemmaster import item_creation_req_models
 
+# ✅ Import Item Master – Dynamic Approval Workflow Engine
+from itemmaster.workflow_routes import router as workflow_router
+from itemmaster import workflow_models
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
