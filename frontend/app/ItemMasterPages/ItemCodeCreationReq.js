@@ -28,6 +28,17 @@ const getSession = () => {
   } catch { return null; }
 };
 
+// Extract user's primary department name from session
+const getUserDepartment = () => {
+  try {
+    const d = JSON.parse(sessionStorage.getItem('userData') || '{}');
+    const user = d?.user;
+    if (!user) return '';
+    const primaryAccess = user.accesses?.find(a => a.is_primary_company) || user.accesses?.[0];
+    return primaryAccess?.department?.department_name || '';
+  } catch { return ''; }
+};
+
 // ─── LOV Modal (reused pattern from existing pages) ───────────────────────
 const LOVModal = ({ title, items, onSelect, onClose, loading = false }) => {
   const [search, setSearch] = useState('');
@@ -123,9 +134,11 @@ const ItemCodeCreationReq = () => {
   const [searchTerm, setSearchTerm]   = useState('');
 
   // ── form state ────────────────────────────────────────────────────────────
+  const userDepartment = getUserDepartment();
+
   const emptyForm = {
     item_name: '', item_description: '', item_short_name: '',
-    item_type: '', department: '', required_date: '', business_reason: '',
+    item_type: '', department: userDepartment, required_date: '', business_reason: '',
     company_id: null, company_label: '',
     plant_id: null,   plant_label: '',
     ref_image_url: '', vendor_quot_url: '', sample_photo_url: '', product_link: ''
@@ -649,7 +662,21 @@ const ItemCodeCreationReq = () => {
             {inp('Item Name', 'item_name', { required: true })}
             {inp('Item Short Name', 'item_short_name', { required: true })}
             {lovField('Item Type', 'item_type', 'itemType', true)}
-            {lovField('Department', 'department', 'department', true)}
+            {/* Department – auto-filled from user session, readonly */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Department <span style={{ color: '#dc2626' }}>*</span></label>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  readOnly
+                  value={form.department}
+                  placeholder="Department (auto from profile)"
+                  style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.department ? '#f0fdf4' : '#f9fafb', cursor: 'default' }}
+                />
+                {form.department && (
+                  <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
+                )}
+              </div>
+            </div>
             {inp('Required Date', 'required_date', { type: 'date', required: true })}
           </div>
           <div style={{ marginTop: 8 }}>
