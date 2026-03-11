@@ -151,43 +151,46 @@ export default function FixBottom() {
             </button>
           )}
 
-          {/* FIXED HOME TAB - always visible, never scrolls away */}
-          {tabs.filter(t => t.path === "/").map((tab) => (
-            <div
-              key={tab.id}
-              onClick={() => handleTabClick(tab)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 10px",
-                background: activeTab === tab.id
-                  ? "linear-gradient(135deg, #87CEEB 0%, #FFD700 100%)"
-                  : "linear-gradient(135deg, #72777cff 0%, #53253bff 100%)",
-                color: activeTab === tab.id ? "#333" : "white",
-                borderRadius: "6px",
-                cursor: isLeftPanelOpen ? "pointer" : "not-allowed",
-                fontSize: "12px",
-                fontWeight: "500",
-                whiteSpace: "nowrap",
-                transition: "all 0.15s ease",
-                minWidth: "fit-content",
-                border: activeTab === tab.id ? "1px solid #FFD700" : "1px solid #53253bff",
-                opacity: isLeftPanelOpen ? 1 : 0.7,
-                pointerEvents: isLeftPanelOpen ? "auto" : "none",
-                flexShrink: 0,
-                marginRight: "4px",
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== tab.id && isLeftPanelOpen) e.currentTarget.style.opacity = "0.9";
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== tab.id && isLeftPanelOpen) e.currentTarget.style.opacity = "1";
-              }}
-            >
-              <span style={{ whiteSpace: "nowrap" }}>{tab.title}</span>
-            </div>
-          ))}
+          {/* FIXED HOME TAB - always single, always visible */}
+          {(() => {
+            const homeTab = tabs.find(t => t.path === "/");
+            if (!homeTab) return null;
+            return (
+              <div
+                onClick={() => handleTabClick(homeTab)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "6px 10px",
+                  background: activeTab === homeTab.id
+                    ? "linear-gradient(135deg, #87CEEB 0%, #FFD700 100%)"
+                    : "linear-gradient(135deg, #72777cff 0%, #53253bff 100%)",
+                  color: activeTab === homeTab.id ? "#333" : "white",
+                  borderRadius: "6px",
+                  cursor: isLeftPanelOpen ? "pointer" : "not-allowed",
+                  fontSize: "12px",
+                  fontWeight: "500",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.15s ease",
+                  minWidth: "fit-content",
+                  border: activeTab === homeTab.id ? "1px solid #FFD700" : "1px solid #53253bff",
+                  opacity: isLeftPanelOpen ? 1 : 0.7,
+                  pointerEvents: isLeftPanelOpen ? "auto" : "none",
+                  flexShrink: 0,
+                  marginRight: "4px",
+                }}
+                onMouseEnter={(e) => {
+                  if (activeTab !== homeTab.id && isLeftPanelOpen) e.currentTarget.style.opacity = "0.9";
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== homeTab.id && isLeftPanelOpen) e.currentTarget.style.opacity = "1";
+                }}
+              >
+                <span style={{ whiteSpace: "nowrap" }}>{homeTab.title}</span>
+              </div>
+            );
+          })()}
 
           {/* Divider between fixed Home and scrollable tabs */}
           {tabs.some(t => t.path === "/") && tabs.length > 1 && (

@@ -96,6 +96,7 @@ app.include_router(config_file_router, prefix="/api/configs", tags=["⚙️ Conf
 app.include_router(icon_creator_router, tags=["🎨 Icon Creator System"])
 app.include_router(excel_router, tags=["📊 Excel / CSV Importer"])
 app.include_router(item_creation_req_router, prefix="/api", tags=["📋 Item Master – Item Code Creation Request"])
+app.include_router(workflow_router, prefix="/api", tags=["🔄 Item Master – Approval Workflow Engine"])
 
 
 @app.get("/")
