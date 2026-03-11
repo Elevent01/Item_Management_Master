@@ -15,7 +15,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search, X, Upload, Plus, Edit2, Trash2, Eye,
   RefreshCw, FileSpreadsheet, Save, ChevronDown,
-  AlertCircle, CheckCircle
+  AlertCircle, CheckCircle, ZoomIn
 } from 'lucide-react';
 
 const API_BASE = 'https://item-management-master-1.onrender.com/api';
@@ -140,6 +140,20 @@ const ItemCodeCreationReq = () => {
 
   // ── LOV modals ────────────────────────────────────────────────────────────
   const [modal, setModal] = useState(null);   // 'company' | 'plant' | 'itemType' | 'department'
+
+  // ── image zoom modal ──────────────────────────────────────────────────────
+  const [zoomModal, setZoomModal] = useState(null);   // { url, label } | null
+  const [imageZoom, setImageZoom] = useState(1);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [isDraggingImg, setIsDraggingImg] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const openZoom = (url, label) => { setZoomModal({ url, label }); setImageZoom(1); setImagePosition({ x: 0, y: 0 }); };
+  const closeZoom = () => { setZoomModal(null); setImageZoom(1); setImagePosition({ x: 0, y: 0 }); };
+  const handleZoomDelta = (delta) => setImageZoom(prev => Math.max(1, Math.min(5, prev + delta)));
+  const handleZoomMouseDown = (e) => { if (imageZoom > 1) { e.preventDefault(); setIsDraggingImg(true); setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y }); } };
+  const handleZoomMouseMove = (e) => { if (isDraggingImg && imageZoom > 1) { e.preventDefault(); setImagePosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); } };
+  const handleZoomMouseUp = () => setIsDraggingImg(false);
 
   // static LOVs (can be replaced with API calls later)
   const itemTypeList = [
@@ -363,12 +377,19 @@ const ItemCodeCreationReq = () => {
                   <td style={{ padding: '6px 8px', borderRight: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>{rec.required_date || '—'}</td>
                   <td style={{ padding: '4px 8px', borderRight: '1px solid #f3f4f6' }}>
                     {rec.optional_documents?.reference_image_url ? (
-                      <img
-                        src={rec.optional_documents.reference_image_url}
-                        alt="Ref"
-                        onError={e => { e.target.style.display = 'none'; }}
-                        style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 3, border: '1px solid #d1d5db', display: 'block' }}
-                      />
+                      <div style={{ position: 'relative', width: 36, height: 36 }}>
+                        <img
+                          src={rec.optional_documents.reference_image_url}
+                          alt="Ref"
+                          onError={e => { e.target.style.display = 'none'; }}
+                          style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 3, border: '1px solid #d1d5db', display: 'block', cursor: 'pointer' }}
+                          onClick={() => openZoom(rec.optional_documents.reference_image_url, rec.item_name)}
+                        />
+                        <button onClick={() => openZoom(rec.optional_documents.reference_image_url, rec.item_name)}
+                          style={{ position: 'absolute', bottom: 1, right: 1, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '50%', width: 14, height: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                          <ZoomIn size={9} />
+                        </button>
+                      </div>
                     ) : <span style={{ color: '#9ca3af' }}>—</span>}
                   </td>
                   <td style={{ padding: '6px 8px', borderRight: '1px solid #f3f4f6' }}>
@@ -470,7 +491,7 @@ const ItemCodeCreationReq = () => {
     </div>
   );
 
-  // ── image upload helper (converts file to base64 data URL for preview, stores as URL in form) ──
+  // ── image upload helper ──────────────────────────────────────────────────
   const handleImageUpload = (fieldKey, file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -490,26 +511,80 @@ const ItemCodeCreationReq = () => {
           placeholder="https://… or upload a file"
           style={{ flex: 1, padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000' }}
         />
-        <label style={{ cursor: 'pointer', padding: '4px 8px', background: '#3b82f6', color: '#fff', borderRadius: 3, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+        <label style={{ cursor: 'pointer', padding: '4px 8px', background: '#3b82f6', color: '#fff', borderRadius: 3, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+          onClick={e => e.stopPropagation()}>
           <Upload size={11} />
           Upload
           <input type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={e => { if (e.target.files[0]) handleImageUpload(urlKey, e.target.files[0]); }} />
+            onChange={e => { e.stopPropagation(); if (e.target.files[0]) handleImageUpload(urlKey, e.target.files[0]); }} />
         </label>
       </div>
       {form[urlKey] && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-          <img src={form[urlKey]} alt={label}
-            onError={e => { e.target.style.display = 'none'; }}
-            style={{ width: 56, height: 56, objectFit: 'cover', border: '1px solid #d1d5db', borderRadius: 4 }} />
+          <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+            <img src={form[urlKey]} alt={label}
+              onError={e => { e.target.style.display = 'none'; }}
+              style={{ width: 56, height: 56, objectFit: 'cover', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+              onClick={() => openZoom(form[urlKey], label)} />
+            <button onClick={() => openZoom(form[urlKey], label)}
+              style={{ position: 'absolute', bottom: 2, right: 2, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+              <ZoomIn size={11} />
+            </button>
+          </div>
           <button onClick={() => setForm(f => ({ ...f, [urlKey]: '' }))}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 10 }}>
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 10, display: 'flex', alignItems: 'center', gap: 2 }}>
             <X size={13} /> Remove
           </button>
         </div>
       )}
     </div>
   );
+
+  // ── zoom image modal ──────────────────────────────────────────────────────
+  const renderZoomModal = () => {
+    if (!zoomModal) return null;
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99998 }}
+        onClick={closeZoom}>
+        <div style={{ width: 700, maxWidth: '90vw', height: 550, maxHeight: '85vh', background: '#fff', borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,.5)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          onClick={e => e.stopPropagation()}>
+          {/* header */}
+          <div style={{ background: 'linear-gradient(to right, #374151, #60a5fa)', color: '#fff', padding: '8px 12px', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 32, flexShrink: 0 }}>
+            <span>{zoomModal.label} — Zoom: {imageZoom.toFixed(1)}x</span>
+            <button onClick={closeZoom} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff' }}><X size={16} /></button>
+          </div>
+          {/* controls */}
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#f9fafb', flexShrink: 0 }}>
+            <button onClick={() => handleZoomDelta(-0.5)} disabled={imageZoom <= 1}
+              style={{ padding: '4px 12px', fontSize: 10, background: imageZoom <= 1 ? '#e5e7eb' : '#3b82f6', color: imageZoom <= 1 ? '#9ca3af' : '#fff', border: 'none', borderRadius: 4, cursor: imageZoom <= 1 ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
+              Zoom Out (-)
+            </button>
+            <button onClick={() => { setImageZoom(1); setImagePosition({ x: 0, y: 0 }); }}
+              style={{ padding: '4px 12px', fontSize: 10, background: '#6b7280', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+              Reset (1x)
+            </button>
+            <button onClick={() => handleZoomDelta(0.5)} disabled={imageZoom >= 5}
+              style={{ padding: '4px 12px', fontSize: 10, background: imageZoom >= 5 ? '#e5e7eb' : '#3b82f6', color: imageZoom >= 5 ? '#9ca3af' : '#fff', border: 'none', borderRadius: 4, cursor: imageZoom >= 5 ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
+              Zoom In (+)
+            </button>
+            <span style={{ fontSize: 10, color: '#666', marginLeft: 8 }}>💡 Scroll to zoom, drag to pan</span>
+          </div>
+          {/* image area */}
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1f2937', position: 'relative', cursor: imageZoom > 1 ? (isDraggingImg ? 'grabbing' : 'grab') : 'default', touchAction: 'none' }}
+            onMouseDown={handleZoomMouseDown}
+            onMouseMove={handleZoomMouseMove}
+            onMouseUp={handleZoomMouseUp}
+            onMouseLeave={handleZoomMouseUp}
+            onWheel={e => { e.preventDefault(); handleZoomDelta(e.deltaY > 0 ? -0.25 : 0.25); }}>
+            <img src={zoomModal.url} alt={zoomModal.label}
+              style={{ transform: `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)`, transition: isDraggingImg ? 'none' : 'transform 0.15s ease-out', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', userSelect: 'none', pointerEvents: 'none', willChange: 'transform' }}
+              draggable={false} />
+          </div>
+          <div style={{ background: 'linear-gradient(to right, #60a5fa, #374151)', height: 8, flexShrink: 0 }} />
+        </div>
+      </div>
+    );
+  };
 
   const renderForm = () => (
     <div className="w-full h-full bg-white rounded-lg shadow-md flex flex-col overflow-hidden">
@@ -675,6 +750,7 @@ const ItemCodeCreationReq = () => {
       {toast && <Toast msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
       {view === 'list' ? renderList() : renderForm()}
       {renderModal()}
+      {renderZoomModal()}
     </div>
   );
 };
