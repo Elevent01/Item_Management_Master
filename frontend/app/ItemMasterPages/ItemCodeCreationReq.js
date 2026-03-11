@@ -35,7 +35,7 @@ const getUserDepartment = () => {
     const user = d?.user;
     if (!user) return '';
     const primaryAccess = user.accesses?.find(a => a.is_primary_company) || user.accesses?.[0];
-    return primaryAccess?.department?.department_name || '';
+    return primaryAccess?.department?.name || primaryAccess?.department?.department_name || '';
   } catch { return ''; }
 };
 
