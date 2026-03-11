@@ -230,7 +230,14 @@ const ItemCodeCreationReq = () => {
 
   // ── save (create / update) ────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!form.item_name.trim()) { showToast('Item Name is required', 'error'); return; }
+    if (!form.company_id)          { showToast('Company is required', 'error'); return; }
+    if (!form.item_name.trim())    { showToast('Item Name is required', 'error'); return; }
+    if (!form.item_short_name.trim()) { showToast('Item Short Name is required', 'error'); return; }
+    if (!form.item_type)           { showToast('Item Type is required', 'error'); return; }
+    if (!form.department)          { showToast('Department is required', 'error'); return; }
+    if (!form.required_date)       { showToast('Required Date is required', 'error'); return; }
+    if (!form.item_description.trim()) { showToast('Item Description is required', 'error'); return; }
+    if (!form.business_reason.trim())  { showToast('Business Reason is required', 'error'); return; }
 
     setSaving(true);
     try {
@@ -397,6 +404,14 @@ const ItemCodeCreationReq = () => {
   //  RENDER – FORM VIEW
   // ══════════════════════════════════════════════════════════════════════════
 
+  // ── title-case formatter: single spaces, each word capitalised ──────────
+  const toTitleInput = (val) => {
+    // Replace multiple spaces with single space, then capitalise each word
+    return val
+      .replace(/ {2,}/g, ' ')
+      .replace(/(^|\s)(\S)/g, (_, space, char) => space + char.toUpperCase());
+  };
+
   // ── small field helpers ────────────────────────────────────────────────
   const inp  = (label, key, opts = {}) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -404,7 +419,10 @@ const ItemCodeCreationReq = () => {
       <input
         type={opts.type || 'text'}
         value={form[key]}
-        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+        onChange={e => {
+          const val = opts.type === 'date' ? e.target.value : toTitleInput(e.target.value);
+          setForm(f => ({ ...f, [key]: val }));
+        }}
         placeholder={opts.placeholder || ''}
         style={{ flex: 1, padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000' }}
       />
@@ -416,7 +434,7 @@ const ItemCodeCreationReq = () => {
       <label style={{ fontSize: 11, color: '#000', minWidth: 130, paddingTop: 4 }}>{label}</label>
       <textarea
         value={form[key]}
-        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+        onChange={e => setForm(f => ({ ...f, [key]: toTitleInput(e.target.value) }))}
         rows={3}
         style={{ flex: 1, padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', resize: 'vertical' }}
       />
@@ -518,7 +536,22 @@ const ItemCodeCreationReq = () => {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
               {lovField('Company', 'company_label', 'company', true)}
-              {lovField('Plant', 'plant_label', 'plant')}
+              {/* Plant – disabled until company is selected */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: 11, color: form.company_id ? '#000' : '#9ca3af', minWidth: 130 }}>Plant <span style={{ color: '#6b7280', fontSize: 10 }}>(Optional)</span></label>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input readOnly value={form.plant_label} placeholder={form.company_id ? 'Select Plant' : 'Select Company first'}
+                    onClick={() => { if (form.company_id) setModal('plant'); }}
+                    style={{ width: '100%', padding: '4px 45px 4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, cursor: form.company_id ? 'pointer' : 'not-allowed', color: form.company_id ? '#000' : '#9ca3af', background: form.company_id ? '#fff' : '#f3f4f6' }} />
+                  {form.plant_label && form.company_id && (
+                    <button onClick={() => setForm(f => ({ ...f, plant_id: null, plant_label: '' }))}
+                      style={{ position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                      <X size={12} color='#ef4444' />
+                    </button>
+                  )}
+                  <Search size={13} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: form.company_id ? '#999' : '#d1d5db' }} />
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -530,16 +563,16 @@ const ItemCodeCreationReq = () => {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
             {inp('Item Name', 'item_name', { required: true })}
-            {inp('Item Short Name', 'item_short_name')}
-            {lovField('Item Type', 'item_type', 'itemType')}
-            {lovField('Department', 'department', 'department')}
-            {inp('Required Date', 'required_date', { type: 'date' })}
+            {inp('Item Short Name', 'item_short_name', { required: true })}
+            {lovField('Item Type', 'item_type', 'itemType', true)}
+            {lovField('Department', 'department', 'department', true)}
+            {inp('Required Date', 'required_date', { type: 'date', required: true })}
           </div>
           <div style={{ marginTop: 8 }}>
-            {textarea('Item Description', 'item_description')}
+            {textarea('Item Description *', 'item_description')}
           </div>
           <div style={{ marginTop: 8 }}>
-            {textarea('Business Reason', 'business_reason')}
+            {textarea('Business Reason *', 'business_reason')}
           </div>
         </div>
 
