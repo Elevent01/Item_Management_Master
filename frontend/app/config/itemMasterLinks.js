@@ -1,5 +1,5 @@
 // app/config/itemMasterLinks.js
-import { Candy, Info, Music, Package, PlusCircle, Wind, Warehouse, FileBox, DollarSign, TrendingUp, ShoppingCart, Building2, ClipboardList } from "lucide-react";
+import { Candy, Info, Music, Package, PlusCircle, Wind, Warehouse, FileBox, DollarSign, TrendingUp, ShoppingCart, Building2, ClipboardList, Settings, Inbox, ClipboardCheck, BarChart2, BadgeCheck } from "lucide-react";
 
 // Import the components
 import ItemInfoMaster from "../ItemMasterPages/ItemInfoMaster.js";
@@ -19,6 +19,11 @@ import ItemMasterWarehouseDetails from "../ItemMasterPages/ItemMasterWarehouseDe
 import ItemMasterPurchaseDetails from "../ItemMasterPages/ItemMasterPurchaseDetails.js";
 import RenderItemMasterWarehouseAndPurchase from "../ItemMasterPages/RenderItemMasterWarehouseAndPurchase.js";
 import ItemCodeCreationReq from "../ItemMasterPages/ItemCodeCreationReq.js";
+import WorkflowAdmin from "../ItemMasterPages/WorkflowAdmin.js";
+import WorkflowInbox from "../ItemMasterPages/WorkflowInbox.js";
+import WorkflowMyRequests from "../ItemMasterPages/WorkflowMyRequests.js";
+import WorkflowStatusBadge from "../ItemMasterPages/WorkflowStatusBadge.js";
+import WorkflowDashboard from "../ItemMasterPages/WorkflowDashboard.js";
 
 export const itemMasterLinks = [
   { 
@@ -139,5 +144,40 @@ export const itemMasterLinks = [
     path: "item-code-creation-req",
     component: ItemCodeCreationReq,
     description: "Raise and manage item code creation requests with company, plant, and document attachments"
-  }
+  },
+  { 
+    name: "Workflow Setup", 
+    icon: Settings, 
+    path: "workflow-admin",
+    component: WorkflowAdmin,
+    description: "Configure workflow templates, steps and approvers for approval processes"
+  },
+  { 
+    name: "Approval Inbox", 
+    icon: Inbox, 
+    path: "workflow-inbox",
+    component: WorkflowInbox,
+    description: "View and act on pending approval requests assigned to you"
+  },
+  { 
+    name: "My Requests", 
+    icon: ClipboardCheck, 
+    path: "workflow-my-requests",
+    component: WorkflowMyRequests,
+    description: "Track status of all approval requests submitted by you"
+  },
+  { 
+    name: "Workflow Status", 
+    icon: BadgeCheck, 
+    path: "workflow-status",
+    component: WorkflowStatusBadge,
+    description: "Check live workflow status and submit requests for approval"
+  },
+  { 
+    name: "Workflow Dashboard", 
+    icon: BarChart2, 
+    path: "workflow-dashboard",
+    component: WorkflowDashboard,
+    description: "Management overview of all active workflows and templates"
+  },
 ];
