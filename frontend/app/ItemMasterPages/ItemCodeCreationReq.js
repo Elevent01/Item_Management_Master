@@ -505,38 +505,47 @@ const ItemCodeCreationReq = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <label style={{ fontSize: 11, color: '#000', fontWeight: 500 }}>{label}</label>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* thumbnail — fixed space reserved always, shows image or empty box */}
+        <div style={{ width: 44, height: 44, flexShrink: 0, border: '1px solid #d1d5db', borderRadius: 4, background: '#f9fafb', overflow: 'hidden', position: 'relative', cursor: form[urlKey] ? 'pointer' : 'default' }}
+          onClick={() => { if (form[urlKey]) openZoom(form[urlKey], label); }}>
+          {form[urlKey] ? (
+            <>
+              <img src={form[urlKey]} alt={label}
+                onError={e => { e.target.style.display = 'none'; }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <button onClick={e => { e.stopPropagation(); openZoom(form[urlKey], label); }}
+                style={{ position: 'absolute', bottom: 1, right: 1, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                <ZoomIn size={9} />
+              </button>
+            </>
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Upload size={16} color="#d1d5db" />
+            </div>
+          )}
+        </div>
+        {/* url input */}
         <input
           value={form[urlKey]}
           onChange={e => setForm(f => ({ ...f, [urlKey]: e.target.value }))}
           placeholder="https://… or upload a file"
           style={{ flex: 1, padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000' }}
         />
-        <label style={{ cursor: 'pointer', padding: '4px 8px', background: '#3b82f6', color: '#fff', borderRadius: 3, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+        {/* upload button */}
+        <label style={{ cursor: 'pointer', padding: '4px 8px', background: '#3b82f6', color: '#fff', borderRadius: 3, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', flexShrink: 0 }}
           onClick={e => e.stopPropagation()}>
-          <Upload size={11} />
-          Upload
+          <Upload size={11} /> Upload
           <input type="file" accept="image/*" style={{ display: 'none' }}
             onChange={e => { e.stopPropagation(); if (e.target.files[0]) handleImageUpload(urlKey, e.target.files[0]); }} />
         </label>
-      </div>
-      {form[urlKey] && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-          <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
-            <img src={form[urlKey]} alt={label}
-              onError={e => { e.target.style.display = 'none'; }}
-              style={{ width: 56, height: 56, objectFit: 'cover', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
-              onClick={() => openZoom(form[urlKey], label)} />
-            <button onClick={() => openZoom(form[urlKey], label)}
-              style={{ position: 'absolute', bottom: 2, right: 2, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
-              <ZoomIn size={11} />
-            </button>
-          </div>
+        {/* remove button — only when image present */}
+        {form[urlKey] && (
           <button onClick={() => setForm(f => ({ ...f, [urlKey]: '' }))}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 10, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <X size={13} /> Remove
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', gap: 2, fontSize: 10, flexShrink: 0 }}>
+            <X size={13} />
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 
