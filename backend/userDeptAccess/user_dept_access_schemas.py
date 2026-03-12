@@ -59,6 +59,7 @@ class UserDeptAccessBulkSet(BaseModel):
     company_id:     int
     department_ids: List[int]
     created_by:     Optional[int] = None
+    update_reason:  Optional[str] = None   # ← reason for this change
 
 class UserDeptAccessResponse(BaseModel):
     id:            int
@@ -67,10 +68,27 @@ class UserDeptAccessResponse(BaseModel):
     department_id: int
     is_granted:    bool
     notes:         Optional[str] = None
+    update_reason: Optional[str] = None
     department:    Optional[DeptBrief] = None
     company:       Optional[CompanyBrief] = None
     created_at:    Optional[datetime] = None
     updated_at:    Optional[datetime] = None
+    class Config: from_attributes = True
+
+
+# ── History response ──────────────────────────────────────────────────────────
+
+class UserDeptAccessHistoryResponse(BaseModel):
+    id:                    int
+    user_id:               int
+    company_id:            int
+    action:                str
+    department_ids_before: Optional[str] = None
+    department_ids_after:  Optional[str] = None
+    update_reason:         Optional[str] = None
+    performed_by:          Optional[int] = None
+    performed_by_name:     Optional[str] = None   # resolved from performer
+    performed_at:          Optional[datetime] = None
     class Config: from_attributes = True
 
 
@@ -101,7 +119,7 @@ class CompanyWithUserCount(BaseModel):
     user_count:   int
 
 
-# ── User list item (right panel after company click) ─────────────────────────
+# ── User list item (middle panel after company click) ────────────────────────
 
 class UserInCompany(BaseModel):
     id:           int
@@ -112,7 +130,6 @@ class UserInCompany(BaseModel):
     role_name:    Optional[str] = None
     dept_name:    Optional[str] = None
     desg_name:    Optional[str] = None
-    # How many depts currently granted for THIS company
     granted_dept_count: int = 0
 
 

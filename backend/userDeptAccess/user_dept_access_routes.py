@@ -6,25 +6,14 @@ FastAPI router — User Department Data Access Control
 Endpoints
 ---------
 GET  /user-dept-access/companies
-    → All companies with how many users each has
-
 GET  /user-dept-access/companies/{company_id}/users
-    → All users of a company with their role/dept/desg + how many depts granted
-
 GET  /user-dept-access/user/{user_id}/detail
-    → Full user detail: companies they belong to + granted depts per company
-
 GET  /user-dept-access/user/{user_id}/company/{company_id}/departments
-    → Granted department IDs for a user in a company (used by other modules)
-
-POST /user-dept-access/bulk-set
-    → Replace all dept access for user+company in one call (admin save)
-
+GET  /user-dept-access/companies/{company_id}/all-departments
+GET  /user-dept-access/user/{user_id}/company/{company_id}/history   ← NEW
+POST /user-dept-access/bulk-set         (now accepts update_reason)
 DELETE /user-dept-access/{access_id}
-    → Remove single dept grant
-
 DELETE /user-dept-access/user/{user_id}/company/{company_id}/clear
-    → Remove ALL dept grants for user in a company
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -33,9 +22,9 @@ from sqlalchemy import and_, func
 from typing import List, Optional
 
 from database import get_db
-import db_models as models                                    # Company, Plant, Role, Dept, Desg
-from user import user_models                                  # User, UserCompanyAccess
-from userDeptAccess.user_dept_access_models import UserDeptDataAccess
+import db_models as models
+from user import user_models
+from userDeptAccess.user_dept_access_models import UserDeptDataAccess, UserDeptDataAccessHistory
 from userDeptAccess.user_dept_access_schemas import (
     UserDeptAccessCreate,
     UserDeptAccessBulkSet,
@@ -44,9 +33,44 @@ from userDeptAccess.user_dept_access_schemas import (
     UserInCompany,
     UserAllowedDepts,
     UserAccessDetail,
+    UserDeptAccessHistoryResponse,
 )
 
 router = APIRouter()
+
+
+# ── Internal helper: snapshot current dept IDs for user+company ───────────────
+
+def _get_current_dept_ids(db: Session, user_id: int, company_id: int) -> str:
+    """Returns comma-separated current dept IDs as string, e.g. '1,3,7' or ''"""
+    rows = db.query(UserDeptDataAccess).filter(
+        UserDeptDataAccess.user_id == user_id,
+        UserDeptDataAccess.company_id == company_id,
+        UserDeptDataAccess.is_granted == True,
+    ).all()
+    return ",".join(str(r.department_id) for r in rows)
+
+
+def _write_history(
+    db: Session,
+    user_id: int,
+    company_id: int,
+    action: str,
+    before: str,
+    after: str,
+    update_reason: Optional[str],
+    performed_by: Optional[int],
+):
+    history = UserDeptDataAccessHistory(
+        user_id=user_id,
+        company_id=company_id,
+        action=action,
+        department_ids_before=before,
+        department_ids_after=after,
+        update_reason=update_reason,
+        performed_by=performed_by,
+    )
+    db.add(history)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -59,11 +83,6 @@ router = APIRouter()
     summary="All companies with user count (left panel)"
 )
 def get_companies_with_user_count(db: Session = Depends(get_db)):
-    """
-    Returns all companies. For each company, counts how many distinct users
-    have UserCompanyAccess entries — i.e. how many users belong to that company.
-    Used to populate the left panel of the admin page.
-    """
     companies = db.query(models.Company).filter(models.Company.is_active == True).all()
 
     result = []
@@ -91,14 +110,9 @@ def get_companies_with_user_count(db: Session = Depends(get_db)):
 @router.get(
     "/user-dept-access/companies/{company_id}/users",
     response_model=List[UserInCompany],
-    summary="Users in a company with their role/dept/desg + granted dept count"
+    summary="Users in a company with role/dept/desg + granted dept count"
 )
 def get_users_in_company(company_id: int, db: Session = Depends(get_db)):
-    """
-    Returns all users who have UserCompanyAccess for this company.
-    For each user, includes their role/dept/desg and how many departments
-    have been granted for data access.
-    """
     company = db.query(models.Company).filter(models.Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -115,12 +129,10 @@ def get_users_in_company(company_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Deduplicate by user_id (user may have multiple access rows for same company)
     seen_users = {}
     for acc in accesses:
         uid = acc.user_id
         if uid not in seen_users:
-            # Count how many depts are granted for this user+company
             granted_count = (
                 db.query(func.count(UserDeptDataAccess.id))
                 .filter(
@@ -159,7 +171,6 @@ def get_user_detail(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # All company accesses
     accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(user_models.UserCompanyAccess.user_id == user_id)
@@ -173,7 +184,6 @@ def get_user_detail(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Group by company
     company_map = {}
     for acc in accesses:
         cid = acc.company_id
@@ -192,7 +202,6 @@ def get_user_detail(user_id: int, db: Session = Depends(get_db)):
             if plant_entry not in company_map[cid]["plants"]:
                 company_map[cid]["plants"].append(plant_entry)
 
-    # Granted depts per company
     dept_grants = (
         db.query(UserDeptDataAccess)
         .filter(
@@ -243,11 +252,6 @@ def get_user_detail(user_id: int, db: Session = Depends(get_db)):
     summary="Get dept IDs a user can see data from (for data filtering)"
 )
 def get_user_allowed_depts(user_id: int, company_id: int, db: Session = Depends(get_db)):
-    """
-    Called by other modules (e.g. item_creation_req) before returning data.
-    Returns list of department IDs user is allowed to see.
-    Empty list = no access at all.
-    """
     grants = (
         db.query(UserDeptDataAccess)
         .filter(
@@ -265,7 +269,7 @@ def get_user_allowed_depts(user_id: int, company_id: int, db: Session = Depends(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 5. GET  all departments in a company (for the dropdown in admin UI)
+# 5. GET  all departments (for dropdown in admin UI)
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get(
@@ -273,16 +277,77 @@ def get_user_allowed_depts(user_id: int, company_id: int, db: Session = Depends(
     summary="All departments available in the system (for adding access)"
 )
 def get_all_departments(company_id: int, db: Session = Depends(get_db)):
-    """
-    Returns all departments from the departments master table.
-    Company filter is accepted for API consistency but departments are global.
-    """
     depts = db.query(models.Department).filter(models.Department.is_active == True).all()
     return [{"id": d.id, "department_name": d.department_name} for d in depts]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 6. POST  bulk set — replace all dept access for user+company
+# 6. GET  history for user+company  ← NEW
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/user-dept-access/user/{user_id}/company/{company_id}/history",
+    summary="Full change history for a user's dept access in a company"
+)
+def get_user_dept_access_history(
+    user_id: int,
+    company_id: int,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns all historical changes to dept access for this user+company.
+    Includes what changed, when, by whom, and the reason provided.
+    Newest first.
+    """
+    rows = (
+        db.query(UserDeptDataAccessHistory)
+        .filter(
+            UserDeptDataAccessHistory.user_id == user_id,
+            UserDeptDataAccessHistory.company_id == company_id,
+        )
+        .options(joinedload(UserDeptDataAccessHistory.performer))
+        .order_by(UserDeptDataAccessHistory.performed_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    # Enrich with department names for before/after IDs
+    def resolve_dept_names(ids_str: Optional[str]) -> list:
+        if not ids_str:
+            return []
+        ids = [int(i) for i in ids_str.split(",") if i.strip().isdigit()]
+        depts = db.query(models.Department).filter(models.Department.id.in_(ids)).all()
+        name_map = {d.id: d.department_name for d in depts}
+        return [{"id": i, "name": name_map.get(i, f"Dept #{i}")} for i in ids]
+
+    result = []
+    for row in rows:
+        result.append({
+            "id": row.id,
+            "action": row.action,
+            "departments_before": resolve_dept_names(row.department_ids_before),
+            "departments_after": resolve_dept_names(row.department_ids_after),
+            "department_ids_before": row.department_ids_before,
+            "department_ids_after": row.department_ids_after,
+            "update_reason": row.update_reason,
+            "performed_by": row.performed_by,
+            "performed_by_name": row.performer.full_name if row.performer else None,
+            "performed_at": row.performed_at,
+        })
+
+    return {
+        "user_id": user_id,
+        "company_id": company_id,
+        "total": len(result),
+        "history": result,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7. POST  bulk set — replace all dept access for user+company
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post(
@@ -293,18 +358,16 @@ def bulk_set_dept_access(payload: UserDeptAccessBulkSet, db: Session = Depends(g
     """
     Replaces ALL department grants for user+company with the new list.
     Pass department_ids=[] to revoke all access.
+    Records full history with before/after snapshot + update_reason.
     """
-    # Validate user
     user = db.query(user_models.User).filter(user_models.User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Validate company
     company = db.query(models.Company).filter(models.Company.id == payload.company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Validate user has access to this company
     has_access = (
         db.query(user_models.UserCompanyAccess)
         .filter(
@@ -319,7 +382,6 @@ def bulk_set_dept_access(payload: UserDeptAccessBulkSet, db: Session = Depends(g
             detail="User does not have access to this company. Assign company access first."
         )
 
-    # Validate all department IDs exist
     if payload.department_ids:
         existing_depts = (
             db.query(models.Department.id)
@@ -334,7 +396,10 @@ def bulk_set_dept_access(payload: UserDeptAccessBulkSet, db: Session = Depends(g
                 detail=f"Invalid department IDs: {list(invalid)}"
             )
 
-    # Delete existing grants for this user+company
+    # Snapshot BEFORE
+    before_snapshot = _get_current_dept_ids(db, payload.user_id, payload.company_id)
+
+    # Delete existing grants
     db.query(UserDeptDataAccess).filter(
         UserDeptDataAccess.user_id == payload.user_id,
         UserDeptDataAccess.company_id == payload.company_id,
@@ -348,8 +413,25 @@ def bulk_set_dept_access(payload: UserDeptAccessBulkSet, db: Session = Depends(g
             department_id=dept_id,
             is_granted=True,
             created_by=payload.created_by,
+            updated_by=payload.created_by,
+            update_reason=payload.update_reason,
         )
         db.add(grant)
+
+    # Snapshot AFTER
+    after_snapshot = ",".join(str(i) for i in payload.department_ids)
+
+    # Write history
+    _write_history(
+        db=db,
+        user_id=payload.user_id,
+        company_id=payload.company_id,
+        action="BULK_SET",
+        before=before_snapshot,
+        after=after_snapshot,
+        update_reason=payload.update_reason,
+        performed_by=payload.created_by,
+    )
 
     db.commit()
 
@@ -359,11 +441,12 @@ def bulk_set_dept_access(payload: UserDeptAccessBulkSet, db: Session = Depends(g
         "company_id": payload.company_id,
         "granted_departments": payload.department_ids,
         "total": len(payload.department_ids),
+        "update_reason": payload.update_reason,
     }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. DELETE  single access row
+# 8. DELETE  single access row
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.delete(
@@ -374,20 +457,46 @@ def remove_dept_access(access_id: int, db: Session = Depends(get_db)):
     grant = db.query(UserDeptDataAccess).filter(UserDeptDataAccess.id == access_id).first()
     if not grant:
         raise HTTPException(status_code=404, detail="Access record not found")
+
+    before_snapshot = _get_current_dept_ids(db, grant.user_id, grant.company_id)
+
     db.delete(grant)
+    db.flush()
+
+    after_snapshot = _get_current_dept_ids(db, grant.user_id, grant.company_id)
+
+    _write_history(
+        db=db,
+        user_id=grant.user_id,
+        company_id=grant.company_id,
+        action="BULK_SET",
+        before=before_snapshot,
+        after=after_snapshot,
+        update_reason="Single department removed",
+        performed_by=None,
+    )
+
     db.commit()
     return {"message": "Department access removed", "id": access_id}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 8. DELETE  clear all for user+company
+# 9. DELETE  clear all for user+company
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.delete(
     "/user-dept-access/user/{user_id}/company/{company_id}/clear",
     summary="Clear all dept access for a user in a company"
 )
-def clear_user_company_dept_access(user_id: int, company_id: int, db: Session = Depends(get_db)):
+def clear_user_company_dept_access(
+    user_id: int,
+    company_id: int,
+    performed_by: Optional[int] = Query(None),
+    reason: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    before_snapshot = _get_current_dept_ids(db, user_id, company_id)
+
     deleted = (
         db.query(UserDeptDataAccess)
         .filter(
@@ -396,6 +505,18 @@ def clear_user_company_dept_access(user_id: int, company_id: int, db: Session = 
         )
         .delete()
     )
+
+    _write_history(
+        db=db,
+        user_id=user_id,
+        company_id=company_id,
+        action="CLEARED",
+        before=before_snapshot,
+        after="",
+        update_reason=reason or "All access cleared",
+        performed_by=performed_by,
+    )
+
     db.commit()
     return {
         "message": f"Cleared {deleted} department access record(s)",
