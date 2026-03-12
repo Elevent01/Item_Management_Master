@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 const API = "http://localhost:8000/api";
 
@@ -71,6 +71,21 @@ const Avatar = ({ name }) => {
     }}>{initials}</div>
   );
 };
+
+// ── NEW: Small company chip shown inside user card ────────────────────────────
+const CompanyChip = ({ name }) => (
+  <span style={{
+    display: "inline-block",
+    padding: "2px 7px", borderRadius: 5,
+    fontSize: 10, fontWeight: 500,
+    color: C.textDim, background: C.card,
+    border: `1px solid ${C.border}`,
+    margin: "2px 2px 0 0",
+    whiteSpace: "nowrap",
+  }}>
+    {name}
+  </span>
+);
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function UserDeptAccessPage() {
@@ -178,7 +193,33 @@ export default function UserDeptAccessPage() {
   };
 
   const grantedDepts = allDepts.filter(d => grantedDeptIds.includes(d.id));
-  const availableDepts = allDepts.filter(d => !grantedDeptIds.includes(d.id));
+
+  // ── NEW helpers ───────────────────────────────────────────────────────────
+
+  // Deduplicated list of company accesses (one per company) for the "User's Companies" strip
+  const getUserCompanyAccesses = () => {
+    if (!userDetail?.company_accesses?.length) return [];
+    const seen = new Set();
+    const result = [];
+    for (const ca of userDetail.company_accesses) {
+      const cid = ca.company?.id ?? ca.company_id;
+      if (cid && !seen.has(cid)) {
+        seen.add(cid);
+        result.push(ca);
+      }
+    }
+    return result;
+  };
+
+  // Access entry for the currently selected company (for role/desg hint in section title)
+  const getSelectedCompanyAccess = () => {
+    if (!userDetail?.company_accesses?.length || !selectedCompany) return null;
+    return userDetail.company_accesses.find(
+      ca => (ca.company?.id ?? ca.company_id) === selectedCompany.id
+    ) || null;
+  };
+
+  const selectedCompanyAccess = getSelectedCompanyAccess();
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -213,10 +254,7 @@ export default function UserDeptAccessPage() {
 
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{
-          margin: 0, fontSize: 22, fontWeight: 700,
-          color: C.text, letterSpacing: -0.5,
-        }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: -0.5 }}>
           👥 User Department Data Access
         </h1>
         <p style={{ margin: "6px 0 0", fontSize: 13, color: C.muted }}>
@@ -225,17 +263,13 @@ export default function UserDeptAccessPage() {
       </div>
 
       {/* 3-column layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "260px 280px 1fr", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "260px 300px 1fr", gap: 16, alignItems: "start" }}>
 
-        {/* ── Col 1: Companies ────────────────────────────────────────────── */}
-        <div style={{
-          background: C.surface, borderRadius: 14,
-          border: `1px solid ${C.border}`, overflow: "hidden",
-        }}>
+        {/* ── Col 1: Companies ── UNCHANGED ───────────────────────────────── */}
+        <div style={{ background: C.surface, borderRadius: 14, border: `1px solid ${C.border}`, overflow: "hidden" }}>
           <div style={{
             padding: "14px 16px", borderBottom: `1px solid ${C.border}`,
-            fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: 0.5,
-            textTransform: "uppercase",
+            fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: 0.5, textTransform: "uppercase",
           }}>
             Companies
           </div>
@@ -270,15 +304,11 @@ export default function UserDeptAccessPage() {
           </div>
         </div>
 
-        {/* ── Col 2: Users ────────────────────────────────────────────────── */}
-        <div style={{
-          background: C.surface, borderRadius: 14,
-          border: `1px solid ${C.border}`, overflow: "hidden",
-        }}>
+        {/* ── Col 2: Users ── UPDATED: company chips added ────────────────── */}
+        <div style={{ background: C.surface, borderRadius: 14, border: `1px solid ${C.border}`, overflow: "hidden" }}>
           <div style={{
             padding: "14px 16px", borderBottom: `1px solid ${C.border}`,
-            fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: 0.5,
-            textTransform: "uppercase",
+            fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: 0.5, textTransform: "uppercase",
           }}>
             {selectedCompany ? `Users — ${selectedCompany.company_name}` : "Select a Company"}
           </div>
@@ -293,41 +323,66 @@ export default function UserDeptAccessPage() {
               <div style={{ padding: 20, color: C.muted, fontSize: 13, textAlign: "center" }}>
                 No users in this company
               </div>
-            ) : users.map(u => (
-              <button
-                key={u.id}
-                onClick={() => setSelectedUser(u)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  width: "100%", padding: "12px 16px", background: "none",
-                  border: "none", borderBottom: `1px solid ${C.border}22`,
-                  cursor: "pointer", textAlign: "left",
-                  color: selectedUser?.id === u.id ? C.accent : C.text,
-                  background: selectedUser?.id === u.id ? C.accentSoft : "transparent",
-                  transition: "all 0.15s",
-                }}
-              >
-                <Avatar name={u.full_name} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {u.full_name}
+            ) : users.map(u => {
+              // Collect unique company names for this user's chip row
+              const companyNames = u.company_accesses
+                ? [...new Map(
+                    u.company_accesses
+                      .map(ca => [
+                        ca.company?.id ?? ca.company_id,
+                        ca.company?.name ?? ca.company?.company_name ?? ca.company_name,
+                      ])
+                      .filter(([, name]) => !!name)
+                  ).values()]
+                : [];
+
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => setSelectedUser(u)}
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: 12,
+                    width: "100%", padding: "12px 16px",
+                    border: "none", borderBottom: `1px solid ${C.border}22`,
+                    cursor: "pointer", textAlign: "left",
+                    color: selectedUser?.id === u.id ? C.accent : C.text,
+                    background: selectedUser?.id === u.id ? C.accentSoft : "transparent",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <Avatar name={u.full_name} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Name */}
+                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {u.full_name}
+                    </div>
+                    {/* Role · Dept — unchanged */}
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                      {u.role_name || "—"} · {u.dept_name || "—"}
+                    </div>
+                    {/* ── NEW: Company chips ── */}
+                    {companyNames.length > 0 && (
+                      <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap" }}>
+                        {companyNames.map((name, i) => (
+                          <CompanyChip key={i} name={name} />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                    {u.role_name || "—"} · {u.dept_name || "—"}
+                  {/* Dept access badge — unchanged */}
+                  <div style={{ flexShrink: 0, paddingTop: 2 }}>
+                    {u.granted_dept_count > 0
+                      ? <Badge color={C.green} bg={C.greenSoft}>{u.granted_dept_count} depts</Badge>
+                      : <Badge color={C.red} bg={C.redSoft}>No access</Badge>
+                    }
                   </div>
-                </div>
-                <div style={{ flexShrink: 0 }}>
-                  {u.granted_dept_count > 0
-                    ? <Badge color={C.green} bg={C.greenSoft}>{u.granted_dept_count} depts</Badge>
-                    : <Badge color={C.red} bg={C.redSoft}>No access</Badge>
-                  }
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* ── Col 3: Dept Access Editor ────────────────────────────────────── */}
+        {/* ── Col 3: Dept Access Editor ── UPDATED: company/role/desg context strip added ── */}
         <div style={{
           background: C.surface, borderRadius: 14,
           border: `1px solid ${C.border}`, overflow: "hidden",
@@ -345,7 +400,7 @@ export default function UserDeptAccessPage() {
             <div style={{ padding: 48, textAlign: "center" }}><Spinner /></div>
           ) : (
             <>
-              {/* User info header */}
+              {/* User info header — UNCHANGED */}
               <div style={{
                 padding: "16px 20px", borderBottom: `1px solid ${C.border}`,
                 display: "flex", alignItems: "center", gap: 14,
@@ -364,33 +419,56 @@ export default function UserDeptAccessPage() {
                 </Badge>
               </div>
 
-              {/* Company access summary */}
-              {userDetail?.company_accesses?.length > 0 && (
+              {/* ── NEW: User's companies with role / desg context ─────────── */}
+              {getUserCompanyAccesses().length > 0 && (
                 <div style={{
                   padding: "12px 20px", borderBottom: `1px solid ${C.border}`,
                   background: C.card,
                 }}>
-                  <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-                    Company Accesses
+                  <div style={{
+                    fontSize: 11, color: C.muted, fontWeight: 600,
+                    textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8,
+                  }}>
+                    User's Company Access
                   </div>
-                  {userDetail.company_accesses.map(ca => (
-                    <div key={ca.company_id} style={{
-                      display: "flex", alignItems: "center", gap: 8,
-                      padding: "6px 0", fontSize: 12, color: C.textDim,
-                    }}>
-                      <span style={{ color: C.accent, fontWeight: 600 }}>🏢 {ca.company_name}</span>
-                      <span>·</span>
-                      <span>{ca.role?.name || "—"}</span>
-                      <span>·</span>
-                      <span>{ca.department?.name || "—"}</span>
-                      <span>·</span>
-                      <span>{ca.designation?.name || "—"}</span>
-                    </div>
-                  ))}
+                  {getUserCompanyAccesses().map((ca, idx) => {
+                    const cid     = ca.company?.id ?? ca.company_id;
+                    const cname   = ca.company?.name ?? ca.company?.company_name ?? ca.company_name ?? "—";
+                    const roleName = ca.role?.name ?? ca.role?.role_name ?? ca.role_name ?? "—";
+                    const desgName = ca.designation?.name ?? ca.designation?.designation_name ?? ca.desg_name ?? "—";
+                    const isCurrent = cid === selectedCompany?.id;
+                    return (
+                      <div key={idx} style={{
+                        display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6,
+                        padding: "6px 10px", marginBottom: 4, borderRadius: 8,
+                        background: isCurrent ? C.accentSoft : "transparent",
+                        border: `1px solid ${isCurrent ? C.accent + "44" : "transparent"}`,
+                      }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: isCurrent ? C.accent : C.textDim }}>
+                          🏢 {cname}
+                        </span>
+                        {isCurrent && (
+                          <span style={{
+                            fontSize: 10, color: C.accent,
+                            background: "#1e2d4a", padding: "1px 6px",
+                            borderRadius: 4, fontWeight: 600,
+                          }}>Selected</span>
+                        )}
+                        <span style={{ fontSize: 11, color: C.muted }}>·</span>
+                        <span style={{ fontSize: 11, color: C.textDim }}>
+                          Role: <b style={{ color: C.text }}>{roleName}</b>
+                        </span>
+                        <span style={{ fontSize: 11, color: C.muted }}>·</span>
+                        <span style={{ fontSize: 11, color: C.textDim }}>
+                          Desg: <b style={{ color: C.text }}>{desgName}</b>
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
-              {/* Dept access editor */}
+              {/* Dept access editor — ALL LOGIC UNCHANGED */}
               <div style={{ padding: 20 }}>
                 <div style={{
                   fontSize: 12, color: C.muted, fontWeight: 600,
@@ -399,13 +477,21 @@ export default function UserDeptAccessPage() {
                   Department Data Access
                   <span style={{ marginLeft: 8, color: C.textDim, fontWeight: 400, fontSize: 11, textTransform: "none" }}>
                     for {selectedCompany?.company_name}
+                    {/* Role/Desg hint for selected company */}
+                    {selectedCompanyAccess && (() => {
+                      const r = selectedCompanyAccess.role?.name ?? selectedCompanyAccess.role_name;
+                      const d = selectedCompanyAccess.designation?.name ?? selectedCompanyAccess.desg_name;
+                      return (r || d)
+                        ? <span style={{ color: C.accent }}> · {[r, d].filter(Boolean).join(" · ")}</span>
+                        : null;
+                    })()}
                   </span>
                 </div>
                 <p style={{ fontSize: 12, color: C.muted, margin: "0 0 16px" }}>
                   User will only see data from departments selected below. No selection = no data visible.
                 </p>
 
-                {/* Currently granted tags */}
+                {/* Currently granted tags — UNCHANGED */}
                 <div style={{
                   minHeight: 48, padding: "10px 12px",
                   background: C.card, borderRadius: 10,
@@ -423,16 +509,14 @@ export default function UserDeptAccessPage() {
                   )}
                 </div>
 
-                {/* Available to add */}
+                {/* All departments toggle — UNCHANGED */}
                 <div style={{
                   fontSize: 11, color: C.muted, fontWeight: 600,
                   textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10,
                 }}>
                   All Departments — click to grant
                 </div>
-                <div style={{
-                  display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 24,
-                }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 24 }}>
                   {allDepts.map(d => {
                     const granted = grantedDeptIds.includes(d.id);
                     return (
@@ -457,7 +541,7 @@ export default function UserDeptAccessPage() {
                   )}
                 </div>
 
-                {/* Save button */}
+                {/* Save button — UNCHANGED */}
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <button
                     onClick={handleSave}
@@ -481,6 +565,7 @@ export default function UserDeptAccessPage() {
             </>
           )}
         </div>
+
       </div>
     </div>
   );
