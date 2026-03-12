@@ -1,5 +1,5 @@
 // app/config/adminMasterLinks.js
-import { Briefcase, Building2, DollarSign, Eye, Factory, FileText, FolderPlus, Grid, Layout, Palette, Settings, Shield, UserPlus, Users } from "lucide-react";
+import { Briefcase, Building2, DollarSign, Eye, Factory, FileText, FolderPlus, Grid, Layout, Palette, Settings, Shield, UserPlus, Users, ShieldCheck } from "lucide-react";
 // Import your page components here
 import AddCompany from "../components/AddCompany";
 import AddCompanyType from "../AdminIconPages/AddCompanyType";
@@ -17,6 +17,7 @@ import CreationMaster from "../AdminIconPages/CreationMaster";
 import EmptyPageCreator from "../PageCreatorSystem/EmptyPageCreator";
 import ConfigLinksCreator from "../PageCreatorSystem/ConfigLinksCreator";
 import IconPageCreator from "../PageCreatorSystem/IconPageCreator";
+import UserDeptAccessPage from "../AdminIconPages/UserDeptAccessPage";
 
 // ========================================
 // ADMIN MASTER LINKS - CENTRAL CONFIG
@@ -88,6 +89,12 @@ export const adminMasterLinks = [
     icon: Shield, 
     path: "role-access-companies-plant",
     component: RoleAccessForCompaniesPlant,
+  },
+  { 
+    name: "User Dept Data Access", 
+    icon: ShieldCheck, 
+    path: "user-dept-access",
+    component: UserDeptAccessPage,
   },
   { 
     name: "Left Menu Panel", 

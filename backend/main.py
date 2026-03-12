@@ -58,6 +58,10 @@ from itemmaster import item_creation_req_models
 from itemmaster.workflow_routes import router as workflow_router
 from itemmaster import workflow_models
 
+# ✅ Import User Department Data Access Control
+from userDeptAccess.user_dept_access_routes import router as user_dept_access_router
+from userDeptAccess import user_dept_access_models
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
@@ -101,6 +105,7 @@ app.include_router(icon_creator_router, tags=["🎨 Icon Creator System"])
 app.include_router(excel_router, tags=["📊 Excel / CSV Importer"])
 app.include_router(item_creation_req_router, prefix="/api", tags=["📋 Item Master – Item Code Creation Request"])
 app.include_router(workflow_router, prefix="/api", tags=["🔄 Item Master – Approval Workflow Engine"])
+app.include_router(user_dept_access_router, prefix="/api", tags=["👥 User Department Data Access"])
 
 
 @app.get("/")
@@ -123,7 +128,8 @@ def read_root():
             "✅ Sonata Custom Fields Module",
             "✅ Automated Page Creation & Management",
             "✅ Icon Page Creator with Auto-Registration",
-            "✅ Item Master – Item Code Creation Request"
+            "✅ Item Master – Item Code Creation Request",
+            "✅ User Department Data Access Control"
         ],
         "docs": "https://item-management-master-1.onrender.com/docs"
     }
@@ -146,7 +152,8 @@ def health_check():
             "sonata_custom_fields": True,
             "page_creation": True,
             "icon_creator": True,
-            "item_code_creation_request": True
+            "item_code_creation_request": True,
+            "user_dept_data_access": True
         }
     }
 
