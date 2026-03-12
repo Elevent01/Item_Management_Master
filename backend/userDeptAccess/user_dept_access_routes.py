@@ -1,122 +1,126 @@
 """
 userDeptAccess/user_dept_access_routes.py
 ──────────────────────────────────────────────────────────────────────────────
-FastAPI router — User Department Data Access Control
+User Department Data Access Control — API Routes
 
-Endpoints
+ENDPOINTS
 ---------
 GET  /user-dept-access/companies
+     → List of all companies with user_count (how many users have access)
+
 GET  /user-dept-access/companies/{company_id}/users
+     → List of users who have access to a company, with their role/dept/desg
+       + granted_dept_count (how many dept data-access rows exist for this user+company)
+
 GET  /user-dept-access/user/{user_id}/detail
-GET  /user-dept-access/user/{user_id}/company/{company_id}/departments
+     → Full detail of a user:
+         - basic info (name, email, phone, is_active)
+         - company_accesses: [{company, role, department, designation}, ...]
+         - dept_access_by_company: [{company_id, granted_departments:[{department_id,...}]}]
+
 GET  /user-dept-access/companies/{company_id}/all-departments
-GET  /user-dept-access/user/{user_id}/company/{company_id}/history   ← NEW
-POST /user-dept-access/bulk-set         (now accepts update_reason)
-DELETE /user-dept-access/{access_id}
-DELETE /user-dept-access/user/{user_id}/company/{company_id}/clear
+     → All departments in the system (used to populate the dept picker)
+       NOTE: departments are global (not per-company in this schema)
+             so we return ALL departments — admin picks which ones apply
+
+POST /user-dept-access/bulk-set
+     Body: { user_id, company_id, department_ids: [int, ...], update_reason? }
+     → Replace all UserDeptDataAccess rows for user+company with the new list
+     → Writes an audit row to UserDeptDataAccessHistory
+     → Returns summary
+
+DELETE /user-dept-access/clear/{user_id}/{company_id}
+     → Remove all dept access for a user+company (set to "no access")
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, func
+from sqlalchemy import func, distinct
 from typing import List, Optional
+from pydantic import BaseModel
 
 from database import get_db
 import db_models as models
 from user import user_models
-from userDeptAccess.user_dept_access_models import UserDeptDataAccess, UserDeptDataAccessHistory
-from userDeptAccess.user_dept_access_schemas import (
-    UserDeptAccessCreate,
-    UserDeptAccessBulkSet,
-    UserDeptAccessResponse,
-    CompanyWithUserCount,
-    UserInCompany,
-    UserAllowedDepts,
-    UserAccessDetail,
-    UserDeptAccessHistoryResponse,
-)
+from userDeptAccess import user_dept_access_models as dept_models
 
 router = APIRouter()
 
 
-# ── Internal helper: snapshot current dept IDs for user+company ───────────────
+# ── Pydantic schemas (inline to keep file self-contained) ─────────────────────
 
-def _get_current_dept_ids(db: Session, user_id: int, company_id: int) -> str:
-    """Returns comma-separated current dept IDs as string, e.g. '1,3,7' or ''"""
-    rows = db.query(UserDeptDataAccess).filter(
-        UserDeptDataAccess.user_id == user_id,
-        UserDeptDataAccess.company_id == company_id,
-        UserDeptDataAccess.is_granted == True,
+class BulkSetRequest(BaseModel):
+    user_id: int
+    company_id: int
+    department_ids: List[int]
+    update_reason: Optional[str] = None
+    performed_by: Optional[int] = None  # admin user id if available
+
+
+# ── Helper: get granted dept ids for user+company ────────────────────────────
+
+def _get_granted_dept_ids(db: Session, user_id: int, company_id: int) -> List[int]:
+    rows = db.query(dept_models.UserDeptDataAccess).filter(
+        dept_models.UserDeptDataAccess.user_id == user_id,
+        dept_models.UserDeptDataAccess.company_id == company_id,
+        dept_models.UserDeptDataAccess.is_granted == True,
     ).all()
-    return ",".join(str(r.department_id) for r in rows)
-
-
-def _write_history(
-    db: Session,
-    user_id: int,
-    company_id: int,
-    action: str,
-    before: str,
-    after: str,
-    update_reason: Optional[str],
-    performed_by: Optional[int],
-):
-    history = UserDeptDataAccessHistory(
-        user_id=user_id,
-        company_id=company_id,
-        action=action,
-        department_ids_before=before,
-        department_ids_after=after,
-        update_reason=update_reason,
-        performed_by=performed_by,
-    )
-    db.add(history)
+    return [r.department_id for r in rows]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. GET  all companies with user count
+# 1. GET /user-dept-access/companies
+#    Returns all companies with user_count
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get(
-    "/user-dept-access/companies",
-    response_model=List[CompanyWithUserCount],
-    summary="All companies with user count (left panel)"
-)
+@router.get("/user-dept-access/companies")
 def get_companies_with_user_count(db: Session = Depends(get_db)):
-    companies = db.query(models.Company).filter(models.Company.is_active == True).all()
+    """
+    Returns every company that exists, with how many distinct users have
+    a UserCompanyAccess row for that company.
+    """
+    # All companies
+    companies = db.query(models.Company).order_by(models.Company.company_name).all()
+
+    # Count users per company from user_company_access
+    user_counts = (
+        db.query(
+            user_models.UserCompanyAccess.company_id,
+            func.count(distinct(user_models.UserCompanyAccess.user_id)).label("cnt")
+        )
+        .group_by(user_models.UserCompanyAccess.company_id)
+        .all()
+    )
+    count_map = {row.company_id: row.cnt for row in user_counts}
 
     result = []
-    for company in companies:
-        user_count = (
-            db.query(func.count(func.distinct(user_models.UserCompanyAccess.user_id)))
-            .filter(user_models.UserCompanyAccess.company_id == company.id)
-            .scalar()
-        ) or 0
+    for c in companies:
+        result.append({
+            "id": c.id,
+            "company_name": c.company_name,
+            "company_code": c.company_code,
+            "user_count": count_map.get(c.id, 0),
+        })
 
-        result.append(CompanyWithUserCount(
-            id=company.id,
-            company_name=company.company_name,
-            company_code=getattr(company, "company_code", None),
-            user_count=user_count
-        ))
-
-    return sorted(result, key=lambda x: x.company_name)
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. GET  users of a company
+# 2. GET /user-dept-access/companies/{company_id}/users
+#    Returns users in a company with role/dept/desg + granted_dept_count
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get(
-    "/user-dept-access/companies/{company_id}/users",
-    response_model=List[UserInCompany],
-    summary="Users in a company with role/dept/desg + granted dept count"
-)
-def get_users_in_company(company_id: int, db: Session = Depends(get_db)):
-    company = db.query(models.Company).filter(models.Company.id == company_id).first()
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
+@router.get("/user-dept-access/companies/{company_id}/users")
+def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
+    """
+    Returns all users that have UserCompanyAccess for this company.
+    Each user row includes:
+      - basic info
+      - role_name, dept_name, desg_name  (from their access record for THIS company)
+      - granted_dept_count               (how many dept data-access rows they have for this company)
+      - company_accesses                 (all companies they have access to, as chips)
+    """
+    # Fetch all UserCompanyAccess rows for this company, with eager loads
     accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(user_models.UserCompanyAccess.company_id == company_id)
@@ -129,54 +133,113 @@ def get_users_in_company(company_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Deduplicate by user_id — keep first access row per user for this company
     seen_users = {}
     for acc in accesses:
         uid = acc.user_id
         if uid not in seen_users:
-            granted_count = (
-                db.query(func.count(UserDeptDataAccess.id))
-                .filter(
-                    UserDeptDataAccess.user_id == uid,
-                    UserDeptDataAccess.company_id == company_id,
-                    UserDeptDataAccess.is_granted == True,
-                )
-                .scalar()
-            ) or 0
+            seen_users[uid] = acc
 
-            seen_users[uid] = UserInCompany(
-                id=acc.user.id,
-                full_name=acc.user.full_name,
-                email=acc.user.email,
-                user_id=acc.user.user_id,
-                is_active=acc.user.is_active,
-                role_name=acc.role.role_name if acc.role else None,
-                dept_name=acc.department.department_name if acc.department else None,
-                desg_name=acc.designation.designation_name if acc.designation else None,
-                granted_dept_count=granted_count,
-            )
+    if not seen_users:
+        return []
 
-    return list(seen_users.values())
+    # For each unique user, also get ALL their company accesses (for chips)
+    all_user_ids = list(seen_users.keys())
+    all_accesses = (
+        db.query(user_models.UserCompanyAccess)
+        .filter(user_models.UserCompanyAccess.user_id.in_(all_user_ids))
+        .options(
+            joinedload(user_models.UserCompanyAccess.company),
+        )
+        .all()
+    )
+
+    # Build map: user_id → list of unique companies
+    user_companies_map: dict = {}
+    for acc in all_accesses:
+        uid = acc.user_id
+        cid = acc.company_id
+        if uid not in user_companies_map:
+            user_companies_map[uid] = {}
+        if cid not in user_companies_map[uid] and acc.company:
+            user_companies_map[uid][cid] = {
+                "id": acc.company.id,
+                "name": acc.company.company_name,
+                "code": acc.company.company_code,
+            }
+
+    # Count dept access rows per user for THIS company
+    dept_counts = (
+        db.query(
+            dept_models.UserDeptDataAccess.user_id,
+            func.count(dept_models.UserDeptDataAccess.id).label("cnt")
+        )
+        .filter(
+            dept_models.UserDeptDataAccess.company_id == company_id,
+            dept_models.UserDeptDataAccess.is_granted == True,
+        )
+        .group_by(dept_models.UserDeptDataAccess.user_id)
+        .all()
+    )
+    dept_count_map = {row.user_id: row.cnt for row in dept_counts}
+
+    result = []
+    for uid, acc in seen_users.items():
+        u = acc.user
+        if not u:
+            continue
+        result.append({
+            "id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "phone": u.phone,
+            "user_id": u.user_id,
+            "is_active": u.is_active,
+            # Role / dept / desg for THIS company
+            "role_name": acc.role.role_name if acc.role else None,
+            "dept_name": acc.department.department_name if acc.department else None,
+            "desg_name": acc.designation.designation_name if acc.designation else None,
+            # How many dept-data-access rows for this company
+            "granted_dept_count": dept_count_map.get(uid, 0),
+            # All companies this user has access to (for chips in Col 2)
+            "company_accesses": [
+                {
+                    "company_id": cid,
+                    "company": {"id": v["id"], "name": v["name"], "code": v["code"]},
+                }
+                for cid, v in user_companies_map.get(uid, {}).items()
+            ],
+        })
+
+    # Sort by name
+    result.sort(key=lambda x: x["full_name"])
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 3. GET  full user detail
+# 3. GET /user-dept-access/user/{user_id}/detail
+#    Full user detail for Col 3
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get(
-    "/user-dept-access/user/{user_id}/detail",
-    summary="Full user detail: company accesses + granted depts per company"
-)
+@router.get("/user-dept-access/user/{user_id}/detail")
 def get_user_detail(user_id: int, db: Session = Depends(get_db)):
+    """
+    Returns:
+      - user basic info
+      - company_accesses: list of {company, role, department, designation}
+        (deduplicated per company — one row per company)
+      - dept_access_by_company: list of {company_id, granted_departments:[{department_id, department_name}]}
+    """
     user = db.query(user_models.User).filter(user_models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # All UserCompanyAccess rows for this user
     accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(user_models.UserCompanyAccess.user_id == user_id)
         .options(
             joinedload(user_models.UserCompanyAccess.company),
-            joinedload(user_models.UserCompanyAccess.plant),
             joinedload(user_models.UserCompanyAccess.role),
             joinedload(user_models.UserCompanyAccess.department),
             joinedload(user_models.UserCompanyAccess.designation),
@@ -184,51 +247,67 @@ def get_user_detail(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    company_map = {}
+    # Deduplicate by company_id — one row per company for context display
+    seen_companies = {}
     for acc in accesses:
         cid = acc.company_id
-        if cid not in company_map:
-            company_map[cid] = {
-                "company_id": cid,
-                "company_name": acc.company.company_name if acc.company else None,
-                "company_code": getattr(acc.company, "company_code", None),
-                "role": {"id": acc.role.id, "name": acc.role.role_name} if acc.role else None,
-                "department": {"id": acc.department.id, "name": acc.department.department_name} if acc.department else None,
-                "designation": {"id": acc.designation.id, "name": acc.designation.designation_name} if acc.designation else None,
-                "plants": [],
-            }
-        if acc.plant:
-            plant_entry = {"id": acc.plant.id, "plant_name": acc.plant.plant_name}
-            if plant_entry not in company_map[cid]["plants"]:
-                company_map[cid]["plants"].append(plant_entry)
+        if cid not in seen_companies:
+            seen_companies[cid] = acc
 
-    dept_grants = (
-        db.query(UserDeptDataAccess)
+    company_accesses_list = []
+    for cid, acc in seen_companies.items():
+        company_accesses_list.append({
+            "company_id": cid,
+            "company": {
+                "id": acc.company.id,
+                "name": acc.company.company_name,
+                "code": acc.company.company_code,
+            } if acc.company else None,
+            "role": {
+                "id": acc.role.id,
+                "name": acc.role.role_name,
+            } if acc.role else None,
+            "department": {
+                "id": acc.department.id,
+                "name": acc.department.department_name,
+            } if acc.department else None,
+            "designation": {
+                "id": acc.designation.id,
+                "name": acc.designation.designation_name,
+            } if acc.designation else None,
+            "is_primary_company": acc.is_primary_company,
+        })
+
+    # Dept data access rows for this user (all companies)
+    dept_rows = (
+        db.query(dept_models.UserDeptDataAccess)
         .filter(
-            UserDeptDataAccess.user_id == user_id,
-            UserDeptDataAccess.is_granted == True,
+            dept_models.UserDeptDataAccess.user_id == user_id,
+            dept_models.UserDeptDataAccess.is_granted == True,
         )
-        .options(
-            joinedload(UserDeptDataAccess.company),
-            joinedload(UserDeptDataAccess.department),
-        )
+        .options(joinedload(dept_models.UserDeptDataAccess.department))
         .all()
     )
 
+    # Group by company_id
     dept_by_company: dict = {}
-    for grant in dept_grants:
-        cid = grant.company_id
+    for row in dept_rows:
+        cid = row.company_id
         if cid not in dept_by_company:
-            dept_by_company[cid] = {
-                "company_id": cid,
-                "company_name": grant.company.company_name if grant.company else None,
-                "granted_departments": [],
-            }
-        dept_by_company[cid]["granted_departments"].append({
-            "access_id": grant.id,
-            "department_id": grant.department_id,
-            "department_name": grant.department.department_name if grant.department else None,
+            dept_by_company[cid] = []
+        dept_by_company[cid].append({
+            "department_id": row.department_id,
+            "department_name": row.department.department_name if row.department else None,
+            "is_granted": row.is_granted,
         })
+
+    dept_access_by_company = [
+        {
+            "company_id": cid,
+            "granted_departments": depts,
+        }
+        for cid, depts in dept_by_company.items()
+    ]
 
     return {
         "id": user.id,
@@ -237,289 +316,164 @@ def get_user_detail(user_id: int, db: Session = Depends(get_db)):
         "phone": user.phone,
         "user_id": user.user_id,
         "is_active": user.is_active,
-        "company_accesses": list(company_map.values()),
-        "dept_access_by_company": list(dept_by_company.values()),
+        "company_accesses": company_accesses_list,
+        "dept_access_by_company": dept_access_by_company,
     }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 4. GET  allowed dept IDs — used by other modules to filter data
+# 4. GET /user-dept-access/companies/{company_id}/all-departments
+#    All departments (global) — used for the dept picker in Col 3
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get(
-    "/user-dept-access/user/{user_id}/company/{company_id}/departments",
-    response_model=UserAllowedDepts,
-    summary="Get dept IDs a user can see data from (for data filtering)"
-)
-def get_user_allowed_depts(user_id: int, company_id: int, db: Session = Depends(get_db)):
-    grants = (
-        db.query(UserDeptDataAccess)
-        .filter(
-            UserDeptDataAccess.user_id == user_id,
-            UserDeptDataAccess.company_id == company_id,
-            UserDeptDataAccess.is_granted == True,
-        )
-        .all()
-    )
-    return UserAllowedDepts(
-        user_id=user_id,
-        company_id=company_id,
-        department_ids=[g.department_id for g in grants],
-    )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 5. GET  all departments (for dropdown in admin UI)
-# ══════════════════════════════════════════════════════════════════════════════
-
-@router.get(
-    "/user-dept-access/companies/{company_id}/all-departments",
-    summary="All departments available in the system (for adding access)"
-)
+@router.get("/user-dept-access/companies/{company_id}/all-departments")
 def get_all_departments(company_id: int, db: Session = Depends(get_db)):
-    depts = db.query(models.Department).filter(models.Department.is_active == True).all()
-    return [{"id": d.id, "department_name": d.department_name} for d in depts]
+    """
+    Returns ALL departments in the system.
+    Departments are not tied to companies in this schema — they are global.
+    The frontend will show these as the picker options.
+
+    company_id is accepted in the URL for future per-company filtering
+    but currently returns all departments.
+    """
+    depts = db.query(models.Department).order_by(models.Department.department_name).all()
+    return [
+        {
+            "id": d.id,
+            "department_name": d.department_name,
+            "department_code": d.department_code,
+        }
+        for d in depts
+    ]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 6. GET  history for user+company  ← NEW
+# 5. POST /user-dept-access/bulk-set
+#    Replace all dept access rows for user+company with new list
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get(
-    "/user-dept-access/user/{user_id}/company/{company_id}/history",
-    summary="Full change history for a user's dept access in a company"
-)
-def get_user_dept_access_history(
-    user_id: int,
-    company_id: int,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db),
-):
+@router.post("/user-dept-access/bulk-set")
+def bulk_set_dept_access(payload: BulkSetRequest, db: Session = Depends(get_db)):
     """
-    Returns all historical changes to dept access for this user+company.
-    Includes what changed, when, by whom, and the reason provided.
-    Newest first.
+    Atomically replaces all UserDeptDataAccess rows for a user+company.
+    - Deletes existing rows
+    - Inserts new rows for each department_id in the list
+    - Writes audit log to UserDeptDataAccessHistory
+    - department_ids = []  →  user sees NO data (all access revoked)
+
+    NOTE: This only affects DATA visibility (UserDeptDataAccess).
+          Page access (CompanyRolePageAccess) is NOT touched.
     """
-    rows = (
-        db.query(UserDeptDataAccessHistory)
-        .filter(
-            UserDeptDataAccessHistory.user_id == user_id,
-            UserDeptDataAccessHistory.company_id == company_id,
-        )
-        .options(joinedload(UserDeptDataAccessHistory.performer))
-        .order_by(UserDeptDataAccessHistory.performed_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-    # Enrich with department names for before/after IDs
-    def resolve_dept_names(ids_str: Optional[str]) -> list:
-        if not ids_str:
-            return []
-        ids = [int(i) for i in ids_str.split(",") if i.strip().isdigit()]
-        depts = db.query(models.Department).filter(models.Department.id.in_(ids)).all()
-        name_map = {d.id: d.department_name for d in depts}
-        return [{"id": i, "name": name_map.get(i, f"Dept #{i}")} for i in ids]
-
-    result = []
-    for row in rows:
-        result.append({
-            "id": row.id,
-            "action": row.action,
-            "departments_before": resolve_dept_names(row.department_ids_before),
-            "departments_after": resolve_dept_names(row.department_ids_after),
-            "department_ids_before": row.department_ids_before,
-            "department_ids_after": row.department_ids_after,
-            "update_reason": row.update_reason,
-            "performed_by": row.performed_by,
-            "performed_by_name": row.performer.full_name if row.performer else None,
-            "performed_at": row.performed_at,
-        })
-
-    return {
-        "user_id": user_id,
-        "company_id": company_id,
-        "total": len(result),
-        "history": result,
-    }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 7. POST  bulk set — replace all dept access for user+company
-# ══════════════════════════════════════════════════════════════════════════════
-
-@router.post(
-    "/user-dept-access/bulk-set",
-    summary="Set all dept access for user+company (replaces existing)"
-)
-def bulk_set_dept_access(payload: UserDeptAccessBulkSet, db: Session = Depends(get_db)):
-    """
-    Replaces ALL department grants for user+company with the new list.
-    Pass department_ids=[] to revoke all access.
-    Records full history with before/after snapshot + update_reason.
-    """
+    # Validate user exists
     user = db.query(user_models.User).filter(user_models.User.id == payload.user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=f"User id={payload.user_id} not found")
 
+    # Validate company exists
     company = db.query(models.Company).filter(models.Company.id == payload.company_id).first()
     if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
+        raise HTTPException(status_code=404, detail=f"Company id={payload.company_id} not found")
 
-    has_access = (
-        db.query(user_models.UserCompanyAccess)
-        .filter(
-            user_models.UserCompanyAccess.user_id == payload.user_id,
-            user_models.UserCompanyAccess.company_id == payload.company_id,
-        )
-        .first()
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=400,
-            detail="User does not have access to this company. Assign company access first."
-        )
-
+    # Validate all department_ids exist
     if payload.department_ids:
-        existing_depts = (
-            db.query(models.Department.id)
-            .filter(models.Department.id.in_(payload.department_ids))
-            .all()
-        )
-        existing_ids = {d.id for d in existing_depts}
-        invalid = set(payload.department_ids) - existing_ids
-        if invalid:
+        found_depts = db.query(models.Department).filter(
+            models.Department.id.in_(payload.department_ids)
+        ).all()
+        found_ids = {d.id for d in found_depts}
+        bad_ids = set(payload.department_ids) - found_ids
+        if bad_ids:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid department IDs: {list(invalid)}"
+                detail=f"Invalid department ids: {sorted(bad_ids)}"
             )
 
-    # Snapshot BEFORE
-    before_snapshot = _get_current_dept_ids(db, payload.user_id, payload.company_id)
+    # ── Snapshot BEFORE ──────────────────────────────────────────────────────
+    existing = db.query(dept_models.UserDeptDataAccess).filter(
+        dept_models.UserDeptDataAccess.user_id == payload.user_id,
+        dept_models.UserDeptDataAccess.company_id == payload.company_id,
+    ).all()
+    ids_before = ",".join(str(r.department_id) for r in existing) if existing else ""
 
-    # Delete existing grants
-    db.query(UserDeptDataAccess).filter(
-        UserDeptDataAccess.user_id == payload.user_id,
-        UserDeptDataAccess.company_id == payload.company_id,
-    ).delete()
+    # ── Delete existing rows ──────────────────────────────────────────────────
+    db.query(dept_models.UserDeptDataAccess).filter(
+        dept_models.UserDeptDataAccess.user_id == payload.user_id,
+        dept_models.UserDeptDataAccess.company_id == payload.company_id,
+    ).delete(synchronize_session=False)
 
-    # Insert new grants
-    for dept_id in payload.department_ids:
-        grant = UserDeptDataAccess(
+    # ── Insert new rows ───────────────────────────────────────────────────────
+    new_dept_ids = list(set(payload.department_ids))  # deduplicate
+    for dept_id in new_dept_ids:
+        row = dept_models.UserDeptDataAccess(
             user_id=payload.user_id,
             company_id=payload.company_id,
             department_id=dept_id,
             is_granted=True,
-            created_by=payload.created_by,
-            updated_by=payload.created_by,
             update_reason=payload.update_reason,
+            created_by=payload.performed_by,
+            updated_by=payload.performed_by,
         )
-        db.add(grant)
+        db.add(row)
 
-    # Snapshot AFTER
-    after_snapshot = ",".join(str(i) for i in payload.department_ids)
+    # ── Audit log ─────────────────────────────────────────────────────────────
+    ids_after = ",".join(str(i) for i in sorted(new_dept_ids)) if new_dept_ids else ""
+    action = "BULK_SET" if new_dept_ids else "CLEARED"
 
-    # Write history
-    _write_history(
-        db=db,
+    history = dept_models.UserDeptDataAccessHistory(
         user_id=payload.user_id,
         company_id=payload.company_id,
-        action="BULK_SET",
-        before=before_snapshot,
-        after=after_snapshot,
+        action=action,
+        department_ids_before=ids_before,
+        department_ids_after=ids_after,
         update_reason=payload.update_reason,
-        performed_by=payload.created_by,
+        performed_by=payload.performed_by,
     )
+    db.add(history)
 
     db.commit()
 
     return {
-        "message": "Department access updated successfully",
+        "success": True,
+        "message": f"Department access updated for user '{user.full_name}' in company '{company.company_name}'",
         "user_id": payload.user_id,
         "company_id": payload.company_id,
-        "granted_departments": payload.department_ids,
-        "total": len(payload.department_ids),
-        "update_reason": payload.update_reason,
+        "departments_granted": len(new_dept_ids),
+        "action": action,
+        "department_ids": sorted(new_dept_ids),
     }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 8. DELETE  single access row
+# 6. DELETE /user-dept-access/clear/{user_id}/{company_id}
+#    Remove all dept access for a user+company
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.delete(
-    "/user-dept-access/{access_id}",
-    summary="Remove single department grant"
-)
-def remove_dept_access(access_id: int, db: Session = Depends(get_db)):
-    grant = db.query(UserDeptDataAccess).filter(UserDeptDataAccess.id == access_id).first()
-    if not grant:
-        raise HTTPException(status_code=404, detail="Access record not found")
+@router.delete("/user-dept-access/clear/{user_id}/{company_id}")
+def clear_dept_access(user_id: int, company_id: int, db: Session = Depends(get_db)):
+    """Revoke all department data access for a user+company."""
+    existing = db.query(dept_models.UserDeptDataAccess).filter(
+        dept_models.UserDeptDataAccess.user_id == user_id,
+        dept_models.UserDeptDataAccess.company_id == company_id,
+    ).all()
+    ids_before = ",".join(str(r.department_id) for r in existing) if existing else ""
 
-    before_snapshot = _get_current_dept_ids(db, grant.user_id, grant.company_id)
+    deleted = db.query(dept_models.UserDeptDataAccess).filter(
+        dept_models.UserDeptDataAccess.user_id == user_id,
+        dept_models.UserDeptDataAccess.company_id == company_id,
+    ).delete(synchronize_session=False)
 
-    db.delete(grant)
-    db.flush()
-
-    after_snapshot = _get_current_dept_ids(db, grant.user_id, grant.company_id)
-
-    _write_history(
-        db=db,
-        user_id=grant.user_id,
-        company_id=grant.company_id,
-        action="BULK_SET",
-        before=before_snapshot,
-        after=after_snapshot,
-        update_reason="Single department removed",
-        performed_by=None,
-    )
-
-    db.commit()
-    return {"message": "Department access removed", "id": access_id}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 9. DELETE  clear all for user+company
-# ══════════════════════════════════════════════════════════════════════════════
-
-@router.delete(
-    "/user-dept-access/user/{user_id}/company/{company_id}/clear",
-    summary="Clear all dept access for a user in a company"
-)
-def clear_user_company_dept_access(
-    user_id: int,
-    company_id: int,
-    performed_by: Optional[int] = Query(None),
-    reason: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-):
-    before_snapshot = _get_current_dept_ids(db, user_id, company_id)
-
-    deleted = (
-        db.query(UserDeptDataAccess)
-        .filter(
-            UserDeptDataAccess.user_id == user_id,
-            UserDeptDataAccess.company_id == company_id,
-        )
-        .delete()
-    )
-
-    _write_history(
-        db=db,
+    history = dept_models.UserDeptDataAccessHistory(
         user_id=user_id,
         company_id=company_id,
         action="CLEARED",
-        before=before_snapshot,
-        after="",
-        update_reason=reason or "All access cleared",
-        performed_by=performed_by,
+        department_ids_before=ids_before,
+        department_ids_after="",
+        update_reason="Manual clear",
     )
-
+    db.add(history)
     db.commit()
+
     return {
-        "message": f"Cleared {deleted} department access record(s)",
-        "user_id": user_id,
-        "company_id": company_id,
+        "success": True,
+        "deleted_rows": deleted,
+        "message": "All department access cleared"
     }
