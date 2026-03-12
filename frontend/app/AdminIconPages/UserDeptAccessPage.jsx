@@ -19,7 +19,7 @@ const C = {
   textDim: "#94a3b8",
 };
 
-// ── Tiny utility components ───────────────────────────────────────────────────
+// ── Utility components ────────────────────────────────────────────────────────
 const Badge = ({ children, color = C.accent, bg = C.accentSoft }) => (
   <span style={{
     display: "inline-flex", alignItems: "center", gap: 4,
@@ -66,13 +66,12 @@ const Avatar = ({ name }) => {
       width: 36, height: 36, borderRadius: "50%",
       background: `hsl(${hue}, 55%, 35%)`,
       display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 13, fontWeight: 700, color: "#fff",
-      flexShrink: 0,
+      fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0,
     }}>{initials}</div>
   );
 };
 
-// ── NEW: Small company chip shown inside user card ────────────────────────────
+// Small company chip for user card
 const CompanyChip = ({ name }) => (
   <span style={{
     display: "inline-block",
@@ -80,22 +79,46 @@ const CompanyChip = ({ name }) => (
     fontSize: 10, fontWeight: 500,
     color: C.textDim, background: C.card,
     border: `1px solid ${C.border}`,
-    margin: "2px 2px 0 0",
-    whiteSpace: "nowrap",
-  }}>
-    {name}
-  </span>
+    margin: "2px 2px 0 0", whiteSpace: "nowrap",
+  }}>{name}</span>
 );
+
+// Error box
+const ErrBox = ({ msg }) => (
+  <div style={{
+    margin: 16, padding: "10px 14px", borderRadius: 8,
+    background: C.redSoft, color: C.red,
+    border: `1px solid ${C.red}44`, fontSize: 12,
+  }}>⚠ {msg}</div>
+);
+
+// ── Safe fetch: returns { data, error } ──────────────────────────────────────
+async function safeFetch(url) {
+  try {
+    const r = await fetch(url);
+    const json = await r.json();
+    if (!r.ok) return { data: null, error: json?.detail || `HTTP ${r.status}` };
+    return { data: json, error: null };
+  } catch (e) {
+    return { data: null, error: e.message };
+  }
+}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function UserDeptAccessPage() {
   const [companies, setCompanies] = useState([]);
+  const [companiesErr, setCompaniesErr] = useState(null);
   const [selectedCompany, setSelectedCompany] = useState(null);
+
   const [users, setUsers] = useState([]);
+  const [usersErr, setUsersErr] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+
   const [userDetail, setUserDetail] = useState(null);
+  const [detailErr, setDetailErr] = useState(null);
   const [allDepts, setAllDepts] = useState([]);
-  const [grantedDeptIds, setGrantedDeptIds] = useState([]);  // local edit state
+  const [grantedDeptIds, setGrantedDeptIds] = useState([]);
+
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
@@ -104,54 +127,59 @@ export default function UserDeptAccessPage() {
 
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
-  // Load companies on mount
+  // ── Load companies on mount ────────────────────────────────────────────────
   useEffect(() => {
     setLoadingCompanies(true);
-    fetch(`${API}/user-dept-access/companies`)
-      .then(r => r.json())
-      .then(setCompanies)
-      .catch(() => showToast("Companies load failed", false))
-      .finally(() => setLoadingCompanies(false));
+    setCompaniesErr(null);
+    safeFetch(`${API}/user-dept-access/companies`).then(({ data, error }) => {
+      if (error) { setCompaniesErr(error); }
+      else { setCompanies(Array.isArray(data) ? data : []); }
+      setLoadingCompanies(false);
+    });
   }, []);
 
-  // Load users when company selected
+  // ── Load users when company selected ──────────────────────────────────────
   useEffect(() => {
-    if (!selectedCompany) { setUsers([]); return; }
+    if (!selectedCompany) { setUsers([]); setUsersErr(null); return; }
     setLoadingUsers(true);
+    setUsersErr(null);
     setSelectedUser(null);
     setUserDetail(null);
-    fetch(`${API}/user-dept-access/companies/${selectedCompany.id}/users`)
-      .then(r => r.json())
-      .then(setUsers)
-      .catch(() => showToast("Users load failed", false))
-      .finally(() => setLoadingUsers(false));
+    safeFetch(`${API}/user-dept-access/companies/${selectedCompany.id}/users`).then(({ data, error }) => {
+      if (error) { setUsersErr(error); }
+      else { setUsers(Array.isArray(data) ? data : []); }
+      setLoadingUsers(false);
+    });
   }, [selectedCompany]);
 
-  // Load user detail + all depts when user selected
+  // ── Load user detail + depts when user selected ───────────────────────────
   useEffect(() => {
     if (!selectedUser || !selectedCompany) return;
     setLoadingDetail(true);
+    setDetailErr(null);
 
     Promise.all([
-      fetch(`${API}/user-dept-access/user/${selectedUser.id}/detail`).then(r => r.json()),
-      fetch(`${API}/user-dept-access/companies/${selectedCompany.id}/all-departments`).then(r => r.json()),
-    ])
-      .then(([detail, depts]) => {
+      safeFetch(`${API}/user-dept-access/user/${selectedUser.id}/detail`),
+      safeFetch(`${API}/user-dept-access/companies/${selectedCompany.id}/all-departments`),
+    ]).then(([{ data: detail, error: e1 }, { data: depts, error: e2 }]) => {
+      if (e1 || e2) {
+        setDetailErr(e1 || e2);
+      } else {
         setUserDetail(detail);
-        setAllDepts(depts);
-        // Find granted depts for this company
-        const companyAccess = detail.dept_access_by_company?.find(
+        setAllDepts(Array.isArray(depts) ? depts : []);
+        // Find granted depts for this company from the detail response
+        const companyAccess = detail?.dept_access_by_company?.find(
           d => d.company_id === selectedCompany.id
         );
         setGrantedDeptIds(
           companyAccess?.granted_departments?.map(d => d.department_id) || []
         );
-      })
-      .catch(() => showToast("Detail load failed", false))
-      .finally(() => setLoadingDetail(false));
+      }
+      setLoadingDetail(false);
+    });
   }, [selectedUser, selectedCompany]);
 
   const toggleDept = (deptId) => {
@@ -173,18 +201,18 @@ export default function UserDeptAccessPage() {
           department_ids: grantedDeptIds,
         }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Save failed");
-      }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.detail || "Save failed");
       showToast("Department access saved successfully ✓");
       // Refresh user list to update granted_dept_count badge
-      const updatedUsers = await fetch(
+      const { data: updatedUsers } = await safeFetch(
         `${API}/user-dept-access/companies/${selectedCompany.id}/users`
-      ).then(r => r.json());
-      setUsers(updatedUsers);
-      const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
-      if (updatedUser) setSelectedUser(updatedUser);
+      );
+      if (updatedUsers) {
+        setUsers(updatedUsers);
+        const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
+        if (updatedUser) setSelectedUser(updatedUser);
+      }
     } catch (e) {
       showToast(e.message, false);
     } finally {
@@ -194,32 +222,22 @@ export default function UserDeptAccessPage() {
 
   const grantedDepts = allDepts.filter(d => grantedDeptIds.includes(d.id));
 
-  // ── NEW helpers ───────────────────────────────────────────────────────────
-
-  // Deduplicated list of company accesses (one per company) for the "User's Companies" strip
+  // Deduplicated company accesses for selected user (for Col 3 context strip)
   const getUserCompanyAccesses = () => {
     if (!userDetail?.company_accesses?.length) return [];
     const seen = new Set();
-    const result = [];
-    for (const ca of userDetail.company_accesses) {
+    return userDetail.company_accesses.filter(ca => {
       const cid = ca.company?.id ?? ca.company_id;
-      if (cid && !seen.has(cid)) {
-        seen.add(cid);
-        result.push(ca);
-      }
-    }
-    return result;
+      if (seen.has(cid)) return false;
+      seen.add(cid);
+      return true;
+    });
   };
 
-  // Access entry for the currently selected company (for role/desg hint in section title)
-  const getSelectedCompanyAccess = () => {
-    if (!userDetail?.company_accesses?.length || !selectedCompany) return null;
-    return userDetail.company_accesses.find(
-      ca => (ca.company?.id ?? ca.company_id) === selectedCompany.id
-    ) || null;
-  };
-
-  const selectedCompanyAccess = getSelectedCompanyAccess();
+  // Access for the currently selected company (role/desg hint)
+  const selectedCompanyAccess = userDetail?.company_accesses?.find(
+    ca => (ca.company?.id ?? ca.company_id) === selectedCompany?.id
+  ) || null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -265,7 +283,7 @@ export default function UserDeptAccessPage() {
       {/* 3-column layout */}
       <div style={{ display: "grid", gridTemplateColumns: "260px 300px 1fr", gap: 16, alignItems: "start" }}>
 
-        {/* ── Col 1: Companies ── UNCHANGED ───────────────────────────────── */}
+        {/* ── Col 1: Companies ────────────────────────────────────────────── */}
         <div style={{ background: C.surface, borderRadius: 14, border: `1px solid ${C.border}`, overflow: "hidden" }}>
           <div style={{
             padding: "14px 16px", borderBottom: `1px solid ${C.border}`,
@@ -276,15 +294,19 @@ export default function UserDeptAccessPage() {
           <div style={{ maxHeight: "calc(100vh - 180px)", overflowY: "auto" }}>
             {loadingCompanies ? (
               <div style={{ padding: 24, textAlign: "center" }}><Spinner /></div>
+            ) : companiesErr ? (
+              <ErrBox msg={`API error: ${companiesErr}`} />
             ) : companies.length === 0 ? (
-              <div style={{ padding: 20, color: C.muted, fontSize: 13, textAlign: "center" }}>No companies found</div>
+              <div style={{ padding: 20, color: C.muted, fontSize: 13, textAlign: "center" }}>
+                No companies found
+              </div>
             ) : companies.map(c => (
               <button
                 key={c.id}
                 onClick={() => setSelectedCompany(c)}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
-                  width: "100%", padding: "12px 16px", background: "none",
+                  width: "100%", padding: "12px 16px",
                   border: "none", borderBottom: `1px solid ${C.border}22`,
                   cursor: "pointer", textAlign: "left",
                   color: selectedCompany?.id === c.id ? C.accent : C.text,
@@ -304,7 +326,7 @@ export default function UserDeptAccessPage() {
           </div>
         </div>
 
-        {/* ── Col 2: Users ── UPDATED: company chips added ────────────────── */}
+        {/* ── Col 2: Users ────────────────────────────────────────────────── */}
         <div style={{ background: C.surface, borderRadius: 14, border: `1px solid ${C.border}`, overflow: "hidden" }}>
           <div style={{
             padding: "14px 16px", borderBottom: `1px solid ${C.border}`,
@@ -319,12 +341,14 @@ export default function UserDeptAccessPage() {
               </div>
             ) : loadingUsers ? (
               <div style={{ padding: 24, textAlign: "center" }}><Spinner /></div>
+            ) : usersErr ? (
+              <ErrBox msg={`API error: ${usersErr}`} />
             ) : users.length === 0 ? (
               <div style={{ padding: 20, color: C.muted, fontSize: 13, textAlign: "center" }}>
                 No users in this company
               </div>
             ) : users.map(u => {
-              // Collect unique company names for this user's chip row
+              // Unique companies for chips
               const companyNames = u.company_accesses
                 ? [...new Map(
                     u.company_accesses
@@ -352,15 +376,13 @@ export default function UserDeptAccessPage() {
                 >
                   <Avatar name={u.full_name} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {/* Name */}
                     <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {u.full_name}
                     </div>
-                    {/* Role · Dept — unchanged */}
                     <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                       {u.role_name || "—"} · {u.dept_name || "—"}
                     </div>
-                    {/* ── NEW: Company chips ── */}
+                    {/* Company chips */}
                     {companyNames.length > 0 && (
                       <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap" }}>
                         {companyNames.map((name, i) => (
@@ -369,7 +391,6 @@ export default function UserDeptAccessPage() {
                       </div>
                     )}
                   </div>
-                  {/* Dept access badge — unchanged */}
                   <div style={{ flexShrink: 0, paddingTop: 2 }}>
                     {u.granted_dept_count > 0
                       ? <Badge color={C.green} bg={C.greenSoft}>{u.granted_dept_count} depts</Badge>
@@ -382,7 +403,7 @@ export default function UserDeptAccessPage() {
           </div>
         </div>
 
-        {/* ── Col 3: Dept Access Editor ── UPDATED: company/role/desg context strip added ── */}
+        {/* ── Col 3: Dept Access Editor ────────────────────────────────────── */}
         <div style={{
           background: C.surface, borderRadius: 14,
           border: `1px solid ${C.border}`, overflow: "hidden",
@@ -398,9 +419,11 @@ export default function UserDeptAccessPage() {
             </div>
           ) : loadingDetail ? (
             <div style={{ padding: 48, textAlign: "center" }}><Spinner /></div>
+          ) : detailErr ? (
+            <ErrBox msg={`Detail load error: ${detailErr}`} />
           ) : (
             <>
-              {/* User info header — UNCHANGED */}
+              {/* User info header */}
               <div style={{
                 padding: "16px 20px", borderBottom: `1px solid ${C.border}`,
                 display: "flex", alignItems: "center", gap: 14,
@@ -419,7 +442,7 @@ export default function UserDeptAccessPage() {
                 </Badge>
               </div>
 
-              {/* ── NEW: User's companies with role / desg context ─────────── */}
+              {/* User's companies with role/desg context */}
               {getUserCompanyAccesses().length > 0 && (
                 <div style={{
                   padding: "12px 20px", borderBottom: `1px solid ${C.border}`,
@@ -432,10 +455,10 @@ export default function UserDeptAccessPage() {
                     User's Company Access
                   </div>
                   {getUserCompanyAccesses().map((ca, idx) => {
-                    const cid     = ca.company?.id ?? ca.company_id;
-                    const cname   = ca.company?.name ?? ca.company?.company_name ?? ca.company_name ?? "—";
-                    const roleName = ca.role?.name ?? ca.role?.role_name ?? ca.role_name ?? "—";
-                    const desgName = ca.designation?.name ?? ca.designation?.designation_name ?? ca.desg_name ?? "—";
+                    const cid      = ca.company?.id ?? ca.company_id;
+                    const cname    = ca.company?.name ?? ca.company?.company_name ?? ca.company_name ?? "—";
+                    const roleName = ca.role?.name ?? ca.role_name ?? "—";
+                    const desgName = ca.designation?.name ?? ca.desg_name ?? "—";
                     const isCurrent = cid === selectedCompany?.id;
                     return (
                       <div key={idx} style={{
@@ -449,9 +472,8 @@ export default function UserDeptAccessPage() {
                         </span>
                         {isCurrent && (
                           <span style={{
-                            fontSize: 10, color: C.accent,
-                            background: "#1e2d4a", padding: "1px 6px",
-                            borderRadius: 4, fontWeight: 600,
+                            fontSize: 10, color: C.accent, background: "#1e2d4a",
+                            padding: "1px 6px", borderRadius: 4, fontWeight: 600,
                           }}>Selected</span>
                         )}
                         <span style={{ fontSize: 11, color: C.muted }}>·</span>
@@ -468,7 +490,7 @@ export default function UserDeptAccessPage() {
                 </div>
               )}
 
-              {/* Dept access editor — ALL LOGIC UNCHANGED */}
+              {/* Dept access editor */}
               <div style={{ padding: 20 }}>
                 <div style={{
                   fontSize: 12, color: C.muted, fontWeight: 600,
@@ -477,7 +499,6 @@ export default function UserDeptAccessPage() {
                   Department Data Access
                   <span style={{ marginLeft: 8, color: C.textDim, fontWeight: 400, fontSize: 11, textTransform: "none" }}>
                     for {selectedCompany?.company_name}
-                    {/* Role/Desg hint for selected company */}
                     {selectedCompanyAccess && (() => {
                       const r = selectedCompanyAccess.role?.name ?? selectedCompanyAccess.role_name;
                       const d = selectedCompanyAccess.designation?.name ?? selectedCompanyAccess.desg_name;
@@ -491,7 +512,7 @@ export default function UserDeptAccessPage() {
                   User will only see data from departments selected below. No selection = no data visible.
                 </p>
 
-                {/* Currently granted tags — UNCHANGED */}
+                {/* Currently granted tags */}
                 <div style={{
                   minHeight: 48, padding: "10px 12px",
                   background: C.card, borderRadius: 10,
@@ -509,7 +530,7 @@ export default function UserDeptAccessPage() {
                   )}
                 </div>
 
-                {/* All departments toggle — UNCHANGED */}
+                {/* All departments toggle */}
                 <div style={{
                   fontSize: 11, color: C.muted, fontWeight: 600,
                   textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10,
@@ -541,7 +562,7 @@ export default function UserDeptAccessPage() {
                   )}
                 </div>
 
-                {/* Save button — UNCHANGED */}
+                {/* Save button */}
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <button
                     onClick={handleSave}
