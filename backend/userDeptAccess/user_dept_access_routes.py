@@ -49,11 +49,13 @@ class BulkSetRequest(BaseModel):
 def get_companies_with_user_count(db: Session = Depends(get_db)):
     companies = db.query(models.Company).order_by(models.Company.company_name).all()
 
+    # Count only users for whom this is their PRIMARY company
     user_counts = (
         db.query(
             user_models.UserCompanyAccess.company_id,
             func.count(distinct(user_models.UserCompanyAccess.user_id)).label("cnt")
         )
+        .filter(user_models.UserCompanyAccess.is_primary_company == True)
         .group_by(user_models.UserCompanyAccess.company_id)
         .all()
     )
@@ -79,10 +81,14 @@ def get_companies_with_user_count(db: Session = Depends(get_db)):
 
 @router.get("/user-dept-access/companies/{company_id}/users")
 def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
-    # All access rows for this company
+    # ONLY users for whom this is their PRIMARY company
+    # (secondary-company users appear in Col3 Step A, not Col2)
     accesses = (
         db.query(user_models.UserCompanyAccess)
-        .filter(user_models.UserCompanyAccess.company_id == company_id)
+        .filter(
+            user_models.UserCompanyAccess.company_id == company_id,
+            user_models.UserCompanyAccess.is_primary_company == True,
+        )
         .options(
             joinedload(user_models.UserCompanyAccess.user),
             joinedload(user_models.UserCompanyAccess.role),
@@ -92,14 +98,12 @@ def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Deduplicate by user_id — prefer is_primary_company=True row
+    # Deduplicate by user_id (should already be unique with primary filter, but be safe)
     user_map: dict = {}
     for acc in accesses:
         uid = acc.user_id
         if uid not in user_map:
             user_map[uid] = acc
-        elif acc.is_primary_company:
-            user_map[uid] = acc  # prefer primary
 
     if not user_map:
         return []
@@ -138,8 +142,7 @@ def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
             "granted_dept_count": dept_count_map.get(uid, 0),
         })
 
-    # Primary company users first, then alphabetical
-    result.sort(key=lambda x: (0 if x["is_primary_company"] else 1, x["full_name"]))
+    result.sort(key=lambda x: x["full_name"])
     return result
 
 
@@ -228,13 +231,22 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
 @router.get("/user-dept-access/user/{user_id}/company/{company_id}/departments")
 def get_user_company_departments(user_id: int, company_id: int, db: Session = Depends(get_db)):
     """
-    Returns departments that are relevant for this user+company.
-    Fetched from UserCompanyAccess.department_id for this user+company.
+    Returns ONLY departments that have page access granted in CompanyRolePageAccess
+    for this user's role+department+designation+company combination.
 
-    Also returns which of those are already granted (data access).
-    Page access is NOT affected.
+    Logic:
+      1. Get user's (role_id, department_id, designation_id) from UserCompanyAccess
+         for this company.
+      2. Find distinct department_ids in CompanyRolePageAccess where
+         company_id + role_id + department_id + designation_id matches AND is_granted=True.
+      3. Return those departments.
+      4. Also return which are already granted in user_dept_data_access (data access).
+
+    Page access (CompanyRolePageAccess) is NOT modified — read-only here.
     """
-    # Get all UserCompanyAccess rows for this user+company
+    from role import role_models as rbac_models
+
+    # Step 1: Get user's access rows for this company
     accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(
@@ -251,17 +263,39 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
             detail=f"No access record found for user {user_id} in company {company_id}"
         )
 
-    # Collect unique departments from UserCompanyAccess
+    # Step 2: For each unique (role_id, dept_id, desg_id) combo,
+    # find departments that have at least one page granted in CompanyRolePageAccess
+    page_granted_dept_ids: set = set()
+
+    for acc in accesses:
+        # Query CompanyRolePageAccess for this exact combo
+        page_rows = (
+            db.query(rbac_models.CompanyRolePageAccess.department_id)
+            .filter(
+                rbac_models.CompanyRolePageAccess.company_id == company_id,
+                rbac_models.CompanyRolePageAccess.role_id == acc.role_id,
+                rbac_models.CompanyRolePageAccess.department_id == acc.department_id,
+                rbac_models.CompanyRolePageAccess.designation_id == acc.designation_id,
+                rbac_models.CompanyRolePageAccess.is_granted == True,
+            )
+            .limit(1)   # just need to know if ANY page is granted for this dept
+            .all()
+        )
+        if page_rows:
+            page_granted_dept_ids.add(acc.department_id)
+
+    # Step 3: Load department objects for the qualifying dept ids
     dept_map: dict = {}
     for acc in accesses:
-        if acc.department and acc.department_id not in dept_map:
-            dept_map[acc.department_id] = {
+        did = acc.department_id
+        if did in page_granted_dept_ids and did not in dept_map and acc.department:
+            dept_map[did] = {
                 "id": acc.department.id,
                 "department_name": acc.department.department_name,
                 "department_code": acc.department.department_code,
             }
 
-    # Which of these are already granted (data access)?
+    # Step 4: Which of these are already granted for data access?
     granted_rows = (
         db.query(dept_models.UserDeptDataAccess)
         .filter(
@@ -271,12 +305,16 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
         )
         .all()
     )
-    granted_ids = {row.department_id for row in granted_rows}
+    # Only count granted_ids that are in our valid dept set
+    granted_ids = {
+        row.department_id for row in granted_rows
+        if row.department_id in page_granted_dept_ids
+    }
 
     return {
         "user_id": user_id,
         "company_id": company_id,
-        "departments": list(dept_map.values()),
+        "departments": sorted(dept_map.values(), key=lambda d: d["department_name"]),
         "granted_dept_ids": list(granted_ids),
     }
 
