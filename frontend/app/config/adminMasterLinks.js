@@ -11,7 +11,15 @@ import AddPlant from "../AdminIconPages/AddPlant";
 import PlantCompanyDetails from "../AdminIconPages/PlantCompanyDetails";
 import UserManagementSystem from "../AdminIconPages/AddUser";
 import UserPlantCompanyAccess from "../AdminIconPages/UsersPlantCompanyAccess";
-import RoleAccessForCompaniesPlant from "../AdminIconPages/RoleAccessForCompaniesPlant"; 
+// 🔥 FIX: RoleAccessForCompaniesPlant direct import hata diya — circular dependency thi
+// (RoleAccessForCompaniesPlant → PageLinksConfig → iconLoader → adminMasterLinks → loop!)
+// Lazy wrapper banaya — kaam exactly same karega, sirf load time defer hoga
+let _RoleAccess = null;
+const RoleAccessForCompaniesPlant = (props) => {
+  if (!_RoleAccess) _RoleAccess = require("../AdminIconPages/RoleAccessForCompaniesPlant").default;
+  const C = _RoleAccess;
+  return <C {...props} />;
+};
 import LeftMenuPanelWithPageAccess from "../components/LeftMenuPannelWithPageAccess"; 
 import CreationMaster from "../AdminIconPages/CreationMaster";
 import EmptyPageCreator from "../PageCreatorSystem/EmptyPageCreator";
