@@ -1,19 +1,14 @@
 """
 userDeptAccess/user_dept_access_routes.py
 ──────────────────────────────────────────────────────────────────────────────
-FLOW:
-  Col 1 → All companies with user_count (primary-company users only)
-  Col 2 → Click company → users whose PRIMARY company is this company
-  Col 3A → Click user → show ALL companies user has access to (UserCompanyAccess)
-  Col 3B → Click a company → show departments registered for that user+company
-           (taken directly from UserCompanyAccess — no page-access filtering)
-  Save   → Store in user_dept_data_access (data-only, NO page access change)
+ENDPOINT #4 KEY FIX:
+  Departments shown =
+    SELECT DISTINCT department_id
+    FROM company_role_page_access
+    WHERE company_id = :company_id
+      AND is_granted = True
 
-IMPORTANT:
-  - Departments shown = departments linked to the user in UserCompanyAccess for
-    that specific company (i.e. the dept(s) the user was registered with).
-  - Page access (CompanyRolePageAccess) is NOT read or modified here.
-  - Saving writes to user_dept_data_access table only.
+  No role/desg filter. No hardcoding. Pure table lookup.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,8 +25,6 @@ from userDeptAccess import user_dept_access_models as dept_models
 router = APIRouter()
 
 
-# ── Inline Pydantic schemas ───────────────────────────────────────────────────
-
 class BulkSetRequest(BaseModel):
     user_id: int
     company_id: int
@@ -42,7 +35,6 @@ class BulkSetRequest(BaseModel):
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. GET /user-dept-access/companies
-#    All companies with how many users have each as their PRIMARY company
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/companies")
@@ -73,8 +65,6 @@ def get_companies_with_user_count(db: Session = Depends(get_db)):
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. GET /user-dept-access/companies/{company_id}/users
-#    Users whose PRIMARY company is this company.
-#    Each user appears once; shows their role/dept/desg and granted_dept_count.
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/companies/{company_id}/users")
@@ -94,7 +84,6 @@ def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Deduplicate by user_id
     user_map: dict = {}
     for acc in accesses:
         uid = acc.user_id
@@ -104,7 +93,6 @@ def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
     if not user_map:
         return []
 
-    # Dept data-access count per user for THIS company
     dept_counts = (
         db.query(
             dept_models.UserDeptDataAccess.user_id,
@@ -144,9 +132,6 @@ def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. GET /user-dept-access/user/{user_id}/companies
-#    All companies this user has access to (from UserCompanyAccess).
-#    Each entry includes role/dept/desg + already-granted dept-data-access count.
-#    Primary company comes first.
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/user/{user_id}/companies")
@@ -163,7 +148,6 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Deduplicate by company_id, prefer primary
     company_map: dict = {}
     for acc in accesses:
         cid = acc.company_id
@@ -172,7 +156,6 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
         elif acc.is_primary_company:
             company_map[cid] = acc
 
-    # Existing dept data access rows for this user (all companies)
     dept_rows = (
         db.query(dept_models.UserDeptDataAccess)
         .filter(
@@ -204,7 +187,6 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
             "granted_dept_count": len(granted_map.get(cid, [])),
         })
 
-    # Primary first, then alphabetical
     result.sort(key=lambda x: (0 if x["is_primary_company"] else 1, x["company_name"]))
     return result
 
@@ -212,56 +194,75 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
 # ══════════════════════════════════════════════════════════════════════════════
 # 4. GET /user-dept-access/user/{user_id}/company/{company_id}/departments
 #
-#    Returns the departments registered for this user+company in UserCompanyAccess.
-#    Simple rule: whatever department(s) the user was registered with for this
-#    company are shown here — no page-access filtering.
+#  SQL equivalent:
+#    SELECT DISTINCT d.id, d.department_name, d.department_code
+#    FROM company_role_page_access crpa
+#    JOIN departments d ON d.id = crpa.department_id
+#    WHERE crpa.company_id = :company_id
+#      AND crpa.is_granted = true
+#    ORDER BY d.department_name;
 #
-#    Also returns which of those are already granted in user_dept_data_access.
+#  Then check user_dept_data_access for already-granted ones.
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/user/{user_id}/company/{company_id}/departments")
 def get_user_company_departments(user_id: int, company_id: int, db: Session = Depends(get_db)):
-    """
-    Returns departments linked to this user+company via UserCompanyAccess.
+    from role import role_models as rbac_models
 
-    Logic:
-      1. Get all UserCompanyAccess rows for user_id + company_id.
-      2. Collect unique department_ids from those rows.
-      3. Load Department objects for those IDs.
-      4. Also return which department_ids are already granted in
-         user_dept_data_access (data-visibility access).
-
-    Page access (CompanyRolePageAccess) is NOT read or modified here.
-    """
-
-    # Step 1: Get user's access rows for this company
-    accesses = (
+    # Verify user actually has access to this company
+    access_exists = (
         db.query(user_models.UserCompanyAccess)
         .filter(
             user_models.UserCompanyAccess.user_id == user_id,
             user_models.UserCompanyAccess.company_id == company_id,
         )
-        .options(joinedload(user_models.UserCompanyAccess.department))
-        .all()
+        .first()
     )
-
-    if not accesses:
+    if not access_exists:
         raise HTTPException(
             status_code=404,
             detail=f"No access record found for user {user_id} in company {company_id}"
         )
 
-    # Step 2 & 3: Collect unique departments from UserCompanyAccess
-    dept_map: dict = {}
-    for acc in accesses:
-        if acc.department and acc.department_id not in dept_map:
-            dept_map[acc.department_id] = {
-                "id": acc.department.id,
-                "department_name": acc.department.department_name,
-                "department_code": getattr(acc.department, "department_code", None),
-            }
+    # SELECT DISTINCT department_id FROM company_role_page_access
+    # WHERE company_id = :company_id AND is_granted = true
+    dept_id_rows = (
+        db.query(distinct(rbac_models.CompanyRolePageAccess.department_id))
+        .filter(
+            rbac_models.CompanyRolePageAccess.company_id == company_id,
+            rbac_models.CompanyRolePageAccess.is_granted == True,
+        )
+        .all()
+    )
 
-    # Step 4: Which of these are already granted for data access?
+    dept_ids = [row[0] for row in dept_id_rows if row[0] is not None]
+
+    if not dept_ids:
+        return {
+            "user_id": user_id,
+            "company_id": company_id,
+            "departments": [],
+            "granted_dept_ids": [],
+        }
+
+    # Load department names
+    dept_objs = (
+        db.query(models.Department)
+        .filter(models.Department.id.in_(dept_ids))
+        .order_by(models.Department.department_name)
+        .all()
+    )
+
+    departments = [
+        {
+            "id": d.id,
+            "department_name": d.department_name,
+            "department_code": d.department_code,
+        }
+        for d in dept_objs
+    ]
+
+    # Which ones has the user already been granted data access to?
     granted_rows = (
         db.query(dept_models.UserDeptDataAccess)
         .filter(
@@ -271,18 +272,17 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
         )
         .all()
     )
-    # Only return granted IDs that are actually valid for this user+company
-    valid_dept_ids = set(dept_map.keys())
-    granted_ids = {
+    valid_set = set(dept_ids)
+    granted_ids = [
         row.department_id for row in granted_rows
-        if row.department_id in valid_dept_ids
-    }
+        if row.department_id in valid_set
+    ]
 
     return {
         "user_id": user_id,
         "company_id": company_id,
-        "departments": sorted(dept_map.values(), key=lambda d: d["department_name"]),
-        "granted_dept_ids": list(granted_ids),
+        "departments": departments,
+        "granted_dept_ids": granted_ids,
     }
 
 
@@ -308,16 +308,10 @@ def get_user_detail(user_id: int, db: Session = Depends(get_db)):
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 6. POST /user-dept-access/bulk-set
-#    Replace dept data access for user+company. NO page access change.
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/user-dept-access/bulk-set")
 def bulk_set_dept_access(payload: BulkSetRequest, db: Session = Depends(get_db)):
-    """
-    Atomically replaces UserDeptDataAccess rows for user+company.
-    ONLY affects data visibility — page access (CompanyRolePageAccess) untouched.
-    department_ids=[] means revoke all (user sees no data).
-    """
     user = db.query(user_models.User).filter(user_models.User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"User id={payload.user_id} not found")
@@ -342,13 +336,13 @@ def bulk_set_dept_access(payload: BulkSetRequest, db: Session = Depends(get_db))
     ).all()
     ids_before = ",".join(str(r.department_id) for r in existing)
 
-    # Delete old rows
+    # Delete old
     db.query(dept_models.UserDeptDataAccess).filter(
         dept_models.UserDeptDataAccess.user_id == payload.user_id,
         dept_models.UserDeptDataAccess.company_id == payload.company_id,
     ).delete(synchronize_session=False)
 
-    # Insert new rows
+    # Insert new
     new_ids = list(set(payload.department_ids))
     for dept_id in new_ids:
         db.add(dept_models.UserDeptDataAccess(
@@ -361,7 +355,6 @@ def bulk_set_dept_access(payload: BulkSetRequest, db: Session = Depends(get_db))
             updated_by=payload.performed_by,
         ))
 
-    # Audit log
     ids_after = ",".join(str(i) for i in sorted(new_ids))
     db.add(dept_models.UserDeptDataAccessHistory(
         user_id=payload.user_id,
@@ -384,11 +377,10 @@ def bulk_set_dept_access(payload: BulkSetRequest, db: Session = Depends(get_db))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. GET /user-dept-access/companies/{company_id}/all-departments  (fallback)
+# 7. GET /user-dept-access/companies/{company_id}/all-departments
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/companies/{company_id}/all-departments")
 def get_all_departments_fallback(company_id: int, db: Session = Depends(get_db)):
-    """Fallback — returns all global departments."""
     depts = db.query(models.Department).order_by(models.Department.department_name).all()
     return [{"id": d.id, "department_name": d.department_name, "department_code": d.department_code} for d in depts]
