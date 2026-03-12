@@ -425,3 +425,114 @@ def get_all_departments_fallback(company_id: int, db: Session = Depends(get_db))
     """Fallback — returns all global departments (not used in new flow)."""
     depts = db.query(models.Department).order_by(models.Department.department_name).all()
     return [{"id": d.id, "department_name": d.department_name, "department_code": d.department_code} for d in depts]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8. GET /user-dept-access/debug/user/{user_id}/company/{company_id}
+#    Debug endpoint — shows exact data to diagnose "No departments" issue
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/user-dept-access/debug/user/{user_id}/company/{company_id}")
+def debug_user_company_access(user_id: int, company_id: int, db: Session = Depends(get_db)):
+    """
+    Debug endpoint — call this to see:
+    1. UserCompanyAccess rows for user+company
+    2. CompanyRolePageAccess rows that match
+    3. What departments would be returned
+    """
+    from role import role_models as rbac_models
+
+    # UserCompanyAccess rows
+    accesses = (
+        db.query(user_models.UserCompanyAccess)
+        .filter(
+            user_models.UserCompanyAccess.user_id == user_id,
+            user_models.UserCompanyAccess.company_id == company_id,
+        )
+        .options(
+            joinedload(user_models.UserCompanyAccess.role),
+            joinedload(user_models.UserCompanyAccess.department),
+            joinedload(user_models.UserCompanyAccess.designation),
+        )
+        .all()
+    )
+
+    access_info = []
+    for acc in accesses:
+        # Check CompanyRolePageAccess for this combo
+        page_count = (
+            db.query(rbac_models.CompanyRolePageAccess)
+            .filter(
+                rbac_models.CompanyRolePageAccess.company_id == company_id,
+                rbac_models.CompanyRolePageAccess.role_id == acc.role_id,
+                rbac_models.CompanyRolePageAccess.department_id == acc.department_id,
+                rbac_models.CompanyRolePageAccess.designation_id == acc.designation_id,
+                rbac_models.CompanyRolePageAccess.is_granted == True,
+            )
+            .count()
+        )
+        # Total rows without is_granted filter
+        page_count_all = (
+            db.query(rbac_models.CompanyRolePageAccess)
+            .filter(
+                rbac_models.CompanyRolePageAccess.company_id == company_id,
+                rbac_models.CompanyRolePageAccess.role_id == acc.role_id,
+                rbac_models.CompanyRolePageAccess.department_id == acc.department_id,
+                rbac_models.CompanyRolePageAccess.designation_id == acc.designation_id,
+            )
+            .count()
+        )
+        access_info.append({
+            "user_company_access_id": acc.id,
+            "role_id": acc.role_id,
+            "role_name": acc.role.role_name if acc.role else None,
+            "department_id": acc.department_id,
+            "department_name": acc.department.department_name if acc.department else None,
+            "designation_id": acc.designation_id,
+            "designation_name": acc.designation.designation_name if acc.designation else None,
+            "is_primary_company": acc.is_primary_company,
+            "company_role_page_access_rows_is_granted_true": page_count,
+            "company_role_page_access_rows_total": page_count_all,
+            "will_department_appear": page_count > 0,
+        })
+
+    # Also show ALL CompanyRolePageAccess rows for this company (regardless of user)
+    all_page_access = (
+        db.query(rbac_models.CompanyRolePageAccess)
+        .filter(rbac_models.CompanyRolePageAccess.company_id == company_id)
+        .options(
+            joinedload(rbac_models.CompanyRolePageAccess.role),
+            joinedload(rbac_models.CompanyRolePageAccess.department),
+            joinedload(rbac_models.CompanyRolePageAccess.designation),
+        )
+        .limit(20)
+        .all()
+    )
+
+    page_access_sample = []
+    for pa in all_page_access:
+        page_access_sample.append({
+            "id": pa.id,
+            "role_id": pa.role_id,
+            "role_name": pa.role.role_name if pa.role else None,
+            "department_id": pa.department_id,
+            "department_name": pa.department.department_name if pa.department else None,
+            "designation_id": pa.designation_id,
+            "designation_name": pa.designation.designation_name if pa.designation else None,
+            "page_id": pa.page_id,
+            "is_granted": pa.is_granted,
+        })
+
+    return {
+        "user_id": user_id,
+        "company_id": company_id,
+        "user_company_access_rows": len(accesses),
+        "access_details": access_info,
+        "company_role_page_access_total_for_company": len(all_page_access),
+        "company_role_page_access_sample": page_access_sample,
+        "diagnosis": (
+            "OK - departments will show" if any(a["will_department_appear"] for a in access_info)
+            else "PROBLEM - no matching CompanyRolePageAccess rows found. "
+                 "Check role_id/department_id/designation_id match between UserCompanyAccess and CompanyRolePageAccess."
+        )
+    }
