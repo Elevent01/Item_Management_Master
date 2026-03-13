@@ -68,10 +68,14 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Fetch all UserCompanyAccess rows for this user
+    # Fetch only PRIMARY company access for this user
+    # (is_primary_company=True → user's own company)
     accesses = (
         db.query(user_models.UserCompanyAccess)
-        .filter(user_models.UserCompanyAccess.user_id == user_id)
+        .filter(
+            user_models.UserCompanyAccess.user_id == user_id,
+            user_models.UserCompanyAccess.is_primary_company == True,
+        )
         .all()
     )
 
