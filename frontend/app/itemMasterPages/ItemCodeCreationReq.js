@@ -39,6 +39,22 @@ const getUserDepartment = () => {
   } catch { return ''; }
 };
 
+// Extract user's primary company from session
+const getPrimaryCompany = () => {
+  try {
+    const d = JSON.parse(sessionStorage.getItem('userData') || '{}');
+    const user = d?.user;
+    if (!user) return null;
+    const primaryAccess = user.accesses?.find(a => a.is_primary_company) || user.accesses?.[0];
+    if (!primaryAccess) return null;
+    return {
+      company_id:   primaryAccess.company?.id   || primaryAccess.company_id,
+      company_name: primaryAccess.company?.company_name || primaryAccess.company_name || '',
+      company_code: primaryAccess.company?.company_code || primaryAccess.company_code || '',
+    };
+  } catch { return null; }
+};
+
 // ─── LOV Modal (reused pattern from existing pages) ───────────────────────
 const LOVModal = ({ title, items, onSelect, onClose, loading = false }) => {
   const [search, setSearch] = useState('');
@@ -158,6 +174,8 @@ const ItemCodeCreationReq = () => {
   const [deptOptions, setDeptOptions]       = useState([]);
   const [deptAccessLoading, setDeptAccessLoading] = useState(true);
   const hasDeptAccess = deptAccessData.length > 0;
+  // When no dept access → use only primary company from session
+  const primaryCompany = getPrimaryCompany();
 
   // ── LOV modals ────────────────────────────────────────────────────────────
   const [modal, setModal] = useState(null);   // 'company' | 'plant' | 'itemType' | 'department'
@@ -237,6 +255,20 @@ const ItemCodeCreationReq = () => {
   }, [user?.id]);
 
   useEffect(() => { loadRecords(); loadCompanyOptions(); loadDeptAccess(); }, [loadRecords, loadCompanyOptions, loadDeptAccess]);
+
+  // Auto-pre-fill primary company when no dept access and deptAccess loaded
+  useEffect(() => {
+    if (deptAccessLoading || hasDeptAccess) return;
+    if (!primaryCompany || form.company_id) return;
+    // Find matching company in companyOptions to get plants
+    const co = companyOptions.find(c => c.id === primaryCompany.company_id);
+    setForm(f => ({
+      ...f,
+      company_id:    primaryCompany.company_id,
+      company_label: primaryCompany.company_name,
+    }));
+    setPlantOptions(co ? co.plants : []);
+  }, [deptAccessLoading, hasDeptAccess, companyOptions]);
 
   // ── when company changes → update plant list + dept options ─────────────
   useEffect(() => {
@@ -656,7 +688,7 @@ const ItemCodeCreationReq = () => {
           </div>
           {(optionsLoading || deptAccessLoading) ? (
             <div style={{ fontSize: 11, color: '#6b7280', padding: 8 }}>Loading your company access…</div>
-          ) : (hasDeptAccess ? deptAccessData : companyOptions).length === 0 ? (
+          ) : !(hasDeptAccess ? deptAccessData.length > 0 : !!primaryCompany) ? (
             <div style={{ fontSize: 11, color: '#dc2626', padding: 8 }}>⚠️ No company access found. Contact administrator.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
@@ -761,14 +793,17 @@ const ItemCodeCreationReq = () => {
     if (!modal) return null;
 
     if (modal === 'company') {
-      const source = hasDeptAccess ? deptAccessData : companyOptions;
+      // hasDeptAccess → granted companies; else → only user's primary company
+      const source = hasDeptAccess
+        ? deptAccessData
+        : (primaryCompany ? [{ ...primaryCompany, id: primaryCompany.company_id }] : []);
       const items  = source.map(c => ({ code: c.company_code || String(c.company_id || c.id), name: c.company_name }));
       return (
         <LOVModal title="SELECT COMPANY" items={items}
           onSelect={item => {
-            const co = source.find(c => c.company_name === item.name || (c.company_code || String(c.company_id || c.id)) === item.code);
+            const co = source.find(c => c.company_name === item.name);
             const coId = co?.company_id || co?.id || null;
-            setForm(f => ({ ...f, company_id: coId, company_label: item.name, plant_id: null, plant_label: '', department: '', department_id: null }));
+            setForm(f => ({ ...f, company_id: coId, company_label: item.name, plant_id: null, plant_label: '', department: hasDeptAccess ? '' : f.department, department_id: null }));
             setModal(null);
           }}
           onClose={() => setModal(null)} />
