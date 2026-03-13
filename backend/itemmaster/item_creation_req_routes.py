@@ -37,6 +37,7 @@ from itemmaster.item_creation_req_models import (
     ItemBasicInfoItemMaster,
     OptionalDocumentItemBasicInfoItemMaster,
 )
+from userdeptaccess import dept_access_models as dept_models   # UserDeptDataAccess
 from itemmaster.item_creation_req_schemas import (
     ItemBasicInfoCreate,
     ItemBasicInfoUpdate,
@@ -111,6 +112,53 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
 
     return result
 
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  1b. GET  dept-access granted companies + departments for a user
+#       Used by ItemCodeCreationReq to check if user has dept-access grants
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/item-creation-req/user/{user_id}/dept-access",
+    summary="Get companies and their granted departments from UserDeptDataAccess"
+)
+def get_user_dept_access(user_id: int, db: Session = Depends(get_db)):
+    """
+    Returns companies + departments where is_granted=True for the user.
+    If empty → user has no dept-access grants → fallback to primary company only.
+    Response: [{ company_id, company_name, company_code, departments: [{id, department_name}] }]
+    """
+    rows = (
+        db.query(dept_models.UserDeptDataAccess)
+        .filter(
+            dept_models.UserDeptDataAccess.user_id == user_id,
+            dept_models.UserDeptDataAccess.is_granted == True,
+        )
+        .all()
+    )
+
+    company_map: dict[int, dict] = {}
+    for row in rows:
+        cid = row.company_id
+        if cid not in company_map:
+            company = db.query(models.Company).filter(models.Company.id == cid).first()
+            if not company:
+                continue
+            company_map[cid] = {
+                "company_id":   company.id,
+                "company_name": company.company_name,
+                "company_code": company.company_code,
+                "departments":  []
+            }
+        if row.department:
+            company_map[cid]["departments"].append({
+                "id":              row.department_id,
+                "department_name": row.department.department_name if row.department else str(row.department_id)
+            })
+
+    return list(company_map.values())
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  2.  POST  create a new request
