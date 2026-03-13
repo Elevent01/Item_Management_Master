@@ -1,14 +1,18 @@
 """
 userDeptAccess/user_dept_access_routes.py
 ──────────────────────────────────────────────────────────────────────────────
-ENDPOINT #4 KEY FIX:
+ENDPOINT #4 LOGIC:
   Departments shown =
     SELECT DISTINCT department_id
     FROM company_role_page_access
-    WHERE company_id = :company_id
-      AND is_granted = True
+    WHERE company_id   = :company_id
+      AND role_id       = :user_role_id       ← user ka role us company mein
+      AND department_id = :user_dept_id       ← user ka dept us company mein
+      AND designation_id= :user_desg_id       ← user ki desg us company mein
 
-  No role/desg filter. No hardcoding. Pure table lookup.
+  Sirf wahi department dikhao jo us user ke
+  role+dept+desg combination ke liye configure hai.
+  No hardcoding. Pure table lookup from UserCompanyAccess + CompanyRolePageAccess.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -198,8 +202,10 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
 #    SELECT DISTINCT d.id, d.department_name, d.department_code
 #    FROM company_role_page_access crpa
 #    JOIN departments d ON d.id = crpa.department_id
-#    WHERE crpa.company_id = :company_id
-#      AND crpa.is_granted = true
+#    WHERE crpa.company_id    = :company_id
+#      AND crpa.role_id       = :user_role_id      ← from UserCompanyAccess
+#      AND crpa.department_id = :user_dept_id      ← from UserCompanyAccess
+#      AND crpa.designation_id= :user_desg_id      ← from UserCompanyAccess
 #    ORDER BY d.department_name;
 #
 #  Then check user_dept_data_access for already-granted ones.
@@ -224,15 +230,31 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
             detail=f"No access record found for user {user_id} in company {company_id}"
         )
 
+    # User ka role_id, department_id, designation_id us company ke liye nikalo
+    # (UserCompanyAccess mein stored hai)
+    user_role_id = access_exists.role_id
+    user_dept_id = access_exists.department_id
+    user_desg_id = access_exists.designation_id
+
     # SELECT DISTINCT department_id FROM company_role_page_access
-    # WHERE company_id = :company_id AND is_granted = true
-    # Sirf is table se lo — koi fallback nahi
+    # WHERE company_id = :company_id
+    #   AND role_id = :user_role_id
+    #   AND department_id = :user_dept_id
+    #   AND designation_id = :user_desg_id
+    # Sirf us user ke role+dept+desg combination ke departments dikho
+    filters = [
+        rbac_models.CompanyRolePageAccess.company_id == company_id,
+    ]
+    if user_role_id:
+        filters.append(rbac_models.CompanyRolePageAccess.role_id == user_role_id)
+    if user_dept_id:
+        filters.append(rbac_models.CompanyRolePageAccess.department_id == user_dept_id)
+    if user_desg_id:
+        filters.append(rbac_models.CompanyRolePageAccess.designation_id == user_desg_id)
+
     dept_id_rows = (
         db.query(distinct(rbac_models.CompanyRolePageAccess.department_id))
-        .filter(
-            rbac_models.CompanyRolePageAccess.company_id == company_id,
-            rbac_models.CompanyRolePageAccess.is_granted == True,
-        )
+        .filter(*filters)
         .all()
     )
 
