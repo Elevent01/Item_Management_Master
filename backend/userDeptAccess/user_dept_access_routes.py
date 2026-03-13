@@ -233,18 +233,18 @@ def get_user_companies(
 #
 #  SQL equivalent:
 #    SELECT DISTINCT d.id, d.department_name, d.department_code
-#    FROM company_role_page_access crpa
-#    JOIN departments d ON d.id = crpa.department_id
-#    WHERE crpa.company_id = :company_id
-#      AND crpa.is_granted = true
+#    FROM user_company_access uca
+#    JOIN departments d ON d.id = uca.department_id
+#    WHERE uca.company_id = :company_id
+#      AND uca.department_id IS NOT NULL
 #    ORDER BY d.department_name;
 #
+#  Source: UserCompanyAccess — wahi departments jo AddUser mein register hue.
 #  Then check user_dept_data_access for already-granted ones.
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/user/{user_id}/company/{company_id}/departments")
 def get_user_company_departments(user_id: int, company_id: int, db: Session = Depends(get_db)):
-    from role import role_models as rbac_models
 
     # Verify user actually has access to this company
     access_exists = (
@@ -261,20 +261,20 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
             detail=f"No access record found for user {user_id} in company {company_id}"
         )
 
-    # SELECT DISTINCT department_id FROM company_role_page_access
-    # WHERE company_id = :company_id
-    # Sirf company ke saare departments — no role/dept/desg/is_granted filter
+    # SELECT DISTINCT department_id FROM user_company_access
+    # WHERE company_id = :company_id AND department_id IS NOT NULL
+    # Us company ke saare registered departments — AddUser se aaye hue
     dept_id_rows = (
-        db.query(distinct(rbac_models.CompanyRolePageAccess.department_id))
+        db.query(distinct(user_models.UserCompanyAccess.department_id))
         .filter(
-            rbac_models.CompanyRolePageAccess.company_id == company_id,
+            user_models.UserCompanyAccess.company_id == company_id,
+            user_models.UserCompanyAccess.department_id.isnot(None),
         )
         .all()
     )
 
     dept_ids = [row[0] for row in dept_id_rows if row[0] is not None]
 
-    # Agar is company ke liye company_role_page_access mein kuch nahi → empty return
     if not dept_ids:
         return {
             "user_id": user_id,
