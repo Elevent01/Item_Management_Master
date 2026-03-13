@@ -37,7 +37,7 @@ from itemmaster.item_creation_req_models import (
     ItemBasicInfoItemMaster,
     OptionalDocumentItemBasicInfoItemMaster,
 )
-from userdeptaccess import dept_access_models as dept_models   # UserDeptDataAccess
+from userDeptAccess import user_dept_access_models as dept_models   # UserDeptDataAccess
 from itemmaster.item_creation_req_schemas import (
     ItemBasicInfoCreate,
     ItemBasicInfoUpdate,
