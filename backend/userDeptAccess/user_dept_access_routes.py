@@ -1,18 +1,14 @@
 """
 userDeptAccess/user_dept_access_routes.py
 ──────────────────────────────────────────────────────────────────────────────
-ENDPOINT #4 LOGIC:
+ENDPOINT #4 KEY FIX:
   Departments shown =
     SELECT DISTINCT department_id
     FROM company_role_page_access
-    WHERE company_id   = :company_id
-      AND role_id       = :user_role_id       ← user ka role us company mein
-      AND department_id = :user_dept_id       ← user ka dept us company mein
-      AND designation_id= :user_desg_id       ← user ki desg us company mein
+    WHERE company_id = :company_id
+      AND is_granted = True
 
-  Sirf wahi department dikhao jo us user ke
-  role+dept+desg combination ke liye configure hai.
-  No hardcoding. Pure table lookup from UserCompanyAccess + CompanyRolePageAccess.
+  No role/desg filter. No hardcoding. Pure table lookup.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -42,8 +38,27 @@ class BulkSetRequest(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/companies")
-def get_companies_with_user_count(db: Session = Depends(get_db)):
-    companies = db.query(models.Company).order_by(models.Company.company_name).all()
+def get_companies_with_user_count(
+    current_user_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    # Agar current_user_id diya hai → sirf uski accessible companies dikhao
+    if current_user_id:
+        accessible = (
+            db.query(user_models.UserCompanyAccess.company_id)
+            .filter(user_models.UserCompanyAccess.user_id == current_user_id)
+            .distinct()
+            .all()
+        )
+        accessible_ids = [row[0] for row in accessible]
+        companies = (
+            db.query(models.Company)
+            .filter(models.Company.id.in_(accessible_ids))
+            .order_by(models.Company.company_name)
+            .all()
+        )
+    else:
+        companies = db.query(models.Company).order_by(models.Company.company_name).all()
 
     user_counts = (
         db.query(
@@ -202,10 +217,8 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
 #    SELECT DISTINCT d.id, d.department_name, d.department_code
 #    FROM company_role_page_access crpa
 #    JOIN departments d ON d.id = crpa.department_id
-#    WHERE crpa.company_id    = :company_id
-#      AND crpa.role_id       = :user_role_id      ← from UserCompanyAccess
-#      AND crpa.department_id = :user_dept_id      ← from UserCompanyAccess
-#      AND crpa.designation_id= :user_desg_id      ← from UserCompanyAccess
+#    WHERE crpa.company_id = :company_id
+#      AND crpa.is_granted = true
 #    ORDER BY d.department_name;
 #
 #  Then check user_dept_data_access for already-granted ones.
@@ -230,31 +243,15 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
             detail=f"No access record found for user {user_id} in company {company_id}"
         )
 
-    # User ka role_id, department_id, designation_id us company ke liye nikalo
-    # (UserCompanyAccess mein stored hai)
-    user_role_id = access_exists.role_id
-    user_dept_id = access_exists.department_id
-    user_desg_id = access_exists.designation_id
-
     # SELECT DISTINCT department_id FROM company_role_page_access
-    # WHERE company_id = :company_id
-    #   AND role_id = :user_role_id
-    #   AND department_id = :user_dept_id
-    #   AND designation_id = :user_desg_id
-    # Sirf us user ke role+dept+desg combination ke departments dikho
-    filters = [
-        rbac_models.CompanyRolePageAccess.company_id == company_id,
-    ]
-    if user_role_id:
-        filters.append(rbac_models.CompanyRolePageAccess.role_id == user_role_id)
-    if user_dept_id:
-        filters.append(rbac_models.CompanyRolePageAccess.department_id == user_dept_id)
-    if user_desg_id:
-        filters.append(rbac_models.CompanyRolePageAccess.designation_id == user_desg_id)
-
+    # WHERE company_id = :company_id AND is_granted = true
+    # Sirf is table se lo — koi fallback nahi
     dept_id_rows = (
         db.query(distinct(rbac_models.CompanyRolePageAccess.department_id))
-        .filter(*filters)
+        .filter(
+            rbac_models.CompanyRolePageAccess.company_id == company_id,
+            rbac_models.CompanyRolePageAccess.is_granted == True,
+        )
         .all()
     )
 
