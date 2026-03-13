@@ -68,9 +68,8 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Fetch only PRIMARY company access for this user
-    # (is_primary_company=True → user's own company)
-    accesses = (
+    # Step 1 — find which company is the user's PRIMARY company
+    primary_accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(
             user_models.UserCompanyAccess.user_id == user_id,
@@ -78,10 +77,22 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
         )
         .all()
     )
+    primary_company_ids = {acc.company_id for acc in primary_accesses}
 
-    # Build company → plants map
+    # Step 2 — fetch ALL access rows for those primary companies
+    # (plant access rows may not be flagged is_primary_company)
+    all_accesses = (
+        db.query(user_models.UserCompanyAccess)
+        .filter(
+            user_models.UserCompanyAccess.user_id == user_id,
+            user_models.UserCompanyAccess.company_id.in_(primary_company_ids),
+        )
+        .all()
+    ) if primary_company_ids else []
+
+    # Build company → plants map (company identity from primary rows, plants from all rows)
     company_map: dict[int, dict] = {}
-    for acc in accesses:
+    for acc in primary_accesses:
         cid = acc.company_id
         if cid not in company_map:
             company = db.query(models.Company).filter(models.Company.id == cid).first()
@@ -93,6 +104,11 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
                 "company_code": company.company_code,
                 "plants":       {}
             }
+
+    for acc in all_accesses:
+        cid = acc.company_id
+        if cid not in company_map:
+            continue  # only care about primary companies
         if acc.plant_id:
             pid = acc.plant_id
             if pid not in company_map[cid]["plants"]:
