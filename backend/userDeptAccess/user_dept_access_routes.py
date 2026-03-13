@@ -414,6 +414,35 @@ def bulk_set_dept_access(payload: BulkSetRequest, db: Session = Depends(get_db))
     }
 
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DEBUG: Check company_role_page_access data for a company
+# GET /user-dept-access/debug/company/{company_id}
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/user-dept-access/debug/company/{company_id}")
+def debug_company_rbac(company_id: int, db: Session = Depends(get_db)):
+    from role import role_models as rbac_models
+    rows = (
+        db.query(rbac_models.CompanyRolePageAccess)
+        .filter(rbac_models.CompanyRolePageAccess.company_id == company_id)
+        .options(
+            joinedload(rbac_models.CompanyRolePageAccess.department),
+            joinedload(rbac_models.CompanyRolePageAccess.role),
+        )
+        .all()
+    )
+    dept_set = {}
+    for r in rows:
+        if r.department_id not in dept_set:
+            dept_set[r.department_id] = r.department.department_name if r.department else "?"
+    return {
+        "company_id": company_id,
+        "total_rows": len(rows),
+        "distinct_departments": [{"id": k, "name": v} for k, v in dept_set.items()]
+    }
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 7. GET /user-dept-access/companies/{company_id}/all-departments
 # ══════════════════════════════════════════════════════════════════════════════
