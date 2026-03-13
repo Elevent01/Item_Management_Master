@@ -224,9 +224,9 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
             detail=f"No access record found for user {user_id} in company {company_id}"
         )
 
-    # Step 1: Try company_role_page_access first
     # SELECT DISTINCT department_id FROM company_role_page_access
     # WHERE company_id = :company_id AND is_granted = true
+    # Sirf is table se lo — koi fallback nahi
     dept_id_rows = (
         db.query(distinct(rbac_models.CompanyRolePageAccess.department_id))
         .filter(
@@ -238,31 +238,13 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
 
     dept_ids = [row[0] for row in dept_id_rows if row[0] is not None]
 
-    # Step 2: Fallback — if no rows in company_role_page_access for this company,
-    # use the department(s) assigned to this user in UserCompanyAccess for this company
-    if not dept_ids:
-        user_access_rows = (
-            db.query(user_models.UserCompanyAccess)
-            .filter(
-                user_models.UserCompanyAccess.user_id == user_id,
-                user_models.UserCompanyAccess.company_id == company_id,
-            )
-            .options(joinedload(user_models.UserCompanyAccess.department))
-            .all()
-        )
-        dept_ids = list({
-            acc.department_id
-            for acc in user_access_rows
-            if acc.department_id is not None
-        })
-
-    # If still nothing found after both sources, return empty
+    # Agar is company ke liye company_role_page_access mein kuch nahi → empty return
     if not dept_ids:
         return {
-            'user_id': user_id,
-            'company_id': company_id,
-            'departments': [],
-            'granted_dept_ids': [],
+            "user_id": user_id,
+            "company_id": company_id,
+            "departments": [],
+            "granted_dept_ids": [],
         }
 
     # Load department names
