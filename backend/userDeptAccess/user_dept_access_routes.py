@@ -261,18 +261,17 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
             detail=f"No access record found for user {user_id} in company {company_id}"
         )
 
-    # SELECT DISTINCT department_id FROM user_company_access
-    # WHERE company_id = :company_id AND department_id IS NOT NULL
-    # Sirf isi company ke departments — dusri company ke nahi
+    # Same source as AddUser /companies/{company_id}/rbac-options
+    # SELECT DISTINCT department_id FROM company_role_page_access
+    # WHERE company_id = :company_id
+    from role import role_models as rbac_models
     dept_id_rows = (
-        db.query(distinct(user_models.UserCompanyAccess.department_id))
+        db.query(distinct(rbac_models.CompanyRolePageAccess.department_id))
         .filter(
-            user_models.UserCompanyAccess.company_id == company_id,
-            user_models.UserCompanyAccess.department_id.isnot(None),
+            rbac_models.CompanyRolePageAccess.company_id == company_id,
         )
         .all()
     )
-    print(f"DEBUG: company_id={company_id}, dept_ids found={[r[0] for r in dept_id_rows]}")
 
     dept_ids = [row[0] for row in dept_id_rows if row[0] is not None]
 
