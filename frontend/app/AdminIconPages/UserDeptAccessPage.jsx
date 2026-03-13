@@ -100,6 +100,24 @@ export default function UserDeptAccessPage() {
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState(null);       // Col1 selection
 
+  // ── Current logged-in admin
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  // Read from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const storedData = sessionStorage.getItem('userData');
+      if (storedData) {
+        const userData = JSON.parse(storedData);
+        if (userData?.user?.id) {
+          setCurrentUserId(userData.user.id);
+        }
+      }
+    } catch (e) {
+      console.error('Error reading session:', e);
+    }
+  }, []);
+
   // ── Col 2 state
   const [users, setUsers] = useState([]);
   const [usersErr, setUsersErr] = useState(null);
@@ -128,15 +146,18 @@ export default function UserDeptAccessPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // ── 1. Load companies on mount ────────────────────────────────────────────
+  // ── 1. Load companies when currentUserId is ready ─────────────────────────
   useEffect(() => {
     setLoadingCompanies(true);
-    safeFetch(`${API}/user-dept-access/companies`).then(({ data, error }) => {
+    const url = currentUserId
+      ? `${API}/user-dept-access/companies?current_user_id=${currentUserId}`
+      : `${API}/user-dept-access/companies`;
+    safeFetch(url).then(({ data, error }) => {
       setCompaniesErr(error);
       setCompanies(Array.isArray(data) ? data : []);
       setLoadingCompanies(false);
     });
-  }, []);
+  }, [currentUserId]);
 
   // ── 2. Load users when Col1 company selected ──────────────────────────────
   useEffect(() => {
@@ -167,7 +188,7 @@ export default function UserDeptAccessPage() {
 
     Promise.all([
       safeFetch(`${API}/user-dept-access/user/${selectedUser.id}/detail`),
-      safeFetch(`${API}/user-dept-access/user/${selectedUser.id}/companies`),
+      safeFetch(`${API}/user-dept-access/user/${selectedUser.id}/companies${currentUserId ? `?current_user_id=${currentUserId}` : ''}`),
     ]).then(([{ data: detail, error: e1 }, { data: comps, error: e2 }]) => {
       if (detail) setUserDetail(detail);
       setUserCompaniesErr(e1 || e2 || null);
@@ -218,7 +239,7 @@ export default function UserDeptAccessPage() {
       showToast("Department access saved ✓");
 
       // Refresh userCompanies to update granted counts
-      const { data: comps } = await safeFetch(`${API}/user-dept-access/user/${selectedUser.id}/companies`);
+      const { data: comps } = await safeFetch(`${API}/user-dept-access/user/${selectedUser.id}/companies${currentUserId ? `?current_user_id=${currentUserId}` : ''}`);
       if (comps) setUserCompanies(comps);
 
       // Refresh user list badge
