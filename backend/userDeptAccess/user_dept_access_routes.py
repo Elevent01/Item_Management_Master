@@ -263,7 +263,7 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
 
     # SELECT DISTINCT department_id FROM user_company_access
     # WHERE company_id = :company_id AND department_id IS NOT NULL
-    # Us company ke saare registered departments — AddUser se aaye hue
+    # Sirf isi company ke departments — dusri company ke nahi
     dept_id_rows = (
         db.query(distinct(user_models.UserCompanyAccess.department_id))
         .filter(
@@ -272,6 +272,7 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
         )
         .all()
     )
+    print(f"DEBUG: company_id={company_id}, dept_ids found={[r[0] for r in dept_id_rows]}")
 
     dept_ids = [row[0] for row in dept_id_rows if row[0] is not None]
 
