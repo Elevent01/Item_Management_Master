@@ -168,13 +168,10 @@ const ItemCodeCreationReq = () => {
   const [optionsLoading, setOptionsLoading] = useState(false);
 
   // ── dept-access grants (from UserDeptDataAccess) ──────────────────────────
-  // If this has entries → user has dept-access grants → show granted companies + depts
-  // If empty → no grants → fallback to primary company + session dept (readonly)
   const [deptAccessData, setDeptAccessData] = useState([]);
   const [deptOptions, setDeptOptions]       = useState([]);
   const [deptAccessLoading, setDeptAccessLoading] = useState(true);
   const hasDeptAccess = deptAccessData.length > 0;
-  // When no dept access → use only primary company from session
   const primaryCompany = getPrimaryCompany();
 
   // ── LOV modals ────────────────────────────────────────────────────────────
@@ -256,37 +253,32 @@ const ItemCodeCreationReq = () => {
 
   useEffect(() => { loadRecords(); loadCompanyOptions(); loadDeptAccess(); }, [loadRecords, loadCompanyOptions, loadDeptAccess]);
 
-  // Auto-pre-fill primary company when no dept access and deptAccess loaded
+  // Auto-pre-fill company when no dept access (companyOptions has only primary company)
   useEffect(() => {
-    if (deptAccessLoading || hasDeptAccess) return;
-    if (!primaryCompany || form.company_id) return;
-    // Find matching company in companyOptions to get plants
-    const co = companyOptions.find(c => c.id === primaryCompany.company_id);
-    setForm(f => ({
-      ...f,
-      company_id:    primaryCompany.company_id,
-      company_label: primaryCompany.company_name,
-    }));
-    setPlantOptions(co ? co.plants : []);
-  }, [deptAccessLoading, hasDeptAccess, companyOptions]);
+    if (deptAccessLoading || optionsLoading || hasDeptAccess) return;
+    if (companyOptions.length === 0) return;
+    const co = companyOptions[0];
+    setForm(f => {
+      if (f.company_id) return f;  // already set (edit mode)
+      const newForm = { ...f, company_id: co.id, company_label: co.company_name };
+      if (!f.plant_id && co.plants?.length === 1) {
+        newForm.plant_id    = co.plants[0].id;
+        newForm.plant_label = co.plants[0].plant_name;
+      }
+      return newForm;
+    });
+    setPlantOptions(co.plants || []);
+  }, [deptAccessLoading, optionsLoading, hasDeptAccess, companyOptions]);
 
-  // ── when company changes → update plant list + dept options ─────────────
+  // ── when company changes → update plant list ──────────────────────────────
   useEffect(() => {
     if (form.company_id) {
       const co = companyOptions.find(c => c.id === form.company_id);
       setPlantOptions(co ? co.plants : []);
-      // update dept options from deptAccessData for this company
-      const da = deptAccessData.find(d => d.company_id === form.company_id);
-      setDeptOptions(da ? da.departments : []);
-      // reset department when company changes (only if hasDeptAccess)
-      if (deptAccessData.length > 0) {
-        setForm(f => ({ ...f, department: '', department_id: null }));
-      }
     } else {
       setPlantOptions([]);
-      setDeptOptions([]);
     }
-  }, [form.company_id, companyOptions, deptAccessData]);
+  }, [form.company_id, companyOptions]);
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const showToast = (msg, type = 'success') => setToast({ msg, type });
@@ -686,13 +678,29 @@ const ItemCodeCreationReq = () => {
           <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 10 }}>
             🏢 Company & Plant (Based on Your Access)
           </div>
-          {(optionsLoading || deptAccessLoading) ? (
+          {optionsLoading ? (
             <div style={{ fontSize: 11, color: '#6b7280', padding: 8 }}>Loading your company access…</div>
-          ) : !(hasDeptAccess ? deptAccessData.length > 0 : !!primaryCompany) ? (
+          ) : companyOptions.length === 0 ? (
             <div style={{ fontSize: 11, color: '#dc2626', padding: 8 }}>⚠️ No company access found. Contact administrator.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
-              {lovField('Company', 'company_label', 'company', true)}
+              {/* Company — readonly if no dept access (auto-filled), LOV if has access */}
+              {hasDeptAccess ? lovField('Company', 'company_label', 'company', true) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Company <span style={{ color: '#dc2626' }}>*</span></label>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      readOnly
+                      value={form.company_label}
+                      placeholder="Loading company…"
+                      style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.company_label ? '#f0fdf4' : '#f9fafb', cursor: 'default' }}
+                    />
+                    {form.company_label && (
+                      <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Plant – disabled until company is selected */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ fontSize: 11, color: form.company_id ? '#000' : '#9ca3af', minWidth: 130 }}>Plant <span style={{ color: '#6b7280', fontSize: 10 }}>(Optional)</span></label>
@@ -722,22 +730,14 @@ const ItemCodeCreationReq = () => {
             {inp('Item Name', 'item_name', { required: true })}
             {inp('Item Short Name', 'item_short_name', { required: true })}
             {lovField('Item Type', 'item_type', 'itemType', true)}
-            {/* Department – LOV if hasDeptAccess, else auto-filled readonly */}
-            {hasDeptAccess ? (
-              lovField('Department', 'department', 'department', true)
-            ) : (
+            {/* Department — LOV if hasDeptAccess, else auto-filled readonly */}
+            {hasDeptAccess ? lovField('Department', 'department', 'department', true) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Department <span style={{ color: '#dc2626' }}>*</span></label>
                 <div style={{ position: 'relative', flex: 1 }}>
-                  <input
-                    readOnly
-                    value={form.department}
-                    placeholder="Department (auto from profile)"
-                    style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.department ? '#f0fdf4' : '#f9fafb', cursor: 'default' }}
-                  />
-                  {form.department && (
-                    <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
-                  )}
+                  <input readOnly value={form.department} placeholder="Department (auto from profile)"
+                    style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.department ? '#f0fdf4' : '#f9fafb', cursor: 'default' }} />
+                  {form.department && <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>}
                 </div>
               </div>
             )}
@@ -793,17 +793,14 @@ const ItemCodeCreationReq = () => {
     if (!modal) return null;
 
     if (modal === 'company') {
-      // hasDeptAccess → granted companies; else → only user's primary company
-      const source = hasDeptAccess
-        ? deptAccessData
-        : (primaryCompany ? [{ ...primaryCompany, id: primaryCompany.company_id }] : []);
-      const items  = source.map(c => ({ code: c.company_code || String(c.company_id || c.id), name: c.company_name }));
+      // Only reached when hasDeptAccess — show granted companies
+      const source = deptAccessData.map(c => ({ ...c, id: c.company_id }));
+      const items  = source.map(c => ({ code: c.company_code || String(c.company_id), name: c.company_name }));
       return (
         <LOVModal title="SELECT COMPANY" items={items}
           onSelect={item => {
             const co = source.find(c => c.company_name === item.name);
-            const coId = co?.company_id || co?.id || null;
-            setForm(f => ({ ...f, company_id: coId, company_label: item.name, plant_id: null, plant_label: '', department: hasDeptAccess ? '' : f.department, department_id: null }));
+            setForm(f => ({ ...f, company_id: co?.id || null, company_label: item.name, plant_id: null, plant_label: '', department: '', department_id: null }));
             setModal(null);
           }}
           onClose={() => setModal(null)} />
@@ -837,8 +834,6 @@ const ItemCodeCreationReq = () => {
     }
 
     if (modal === 'department') {
-      // If hasDeptAccess → show only granted departments for selected company
-      // else → show full static deptList
       const deptsForModal = hasDeptAccess
         ? deptOptions.map(d => ({ code: String(d.id), name: d.department_name }))
         : deptList;
