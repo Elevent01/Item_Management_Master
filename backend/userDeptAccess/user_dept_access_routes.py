@@ -154,7 +154,11 @@ def get_users_for_company(company_id: int, db: Session = Depends(get_db)):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/user-dept-access/user/{user_id}/companies")
-def get_user_companies(user_id: int, db: Session = Depends(get_db)):
+def get_user_companies(
+    user_id: int,
+    current_user_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(user_models.UserCompanyAccess.user_id == user_id)
@@ -167,9 +171,23 @@ def get_user_companies(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Agar current_user_id diya → sirf woh companies dikhao jo admin ko bhi accessible hain
+    admin_company_ids: Optional[set] = None
+    if current_user_id:
+        admin_rows = (
+            db.query(user_models.UserCompanyAccess.company_id)
+            .filter(user_models.UserCompanyAccess.user_id == current_user_id)
+            .distinct()
+            .all()
+        )
+        admin_company_ids = {row[0] for row in admin_rows}
+
     company_map: dict = {}
     for acc in accesses:
         cid = acc.company_id
+        # Agar admin filter hai aur yeh company admin ko accessible nahi → skip
+        if admin_company_ids is not None and cid not in admin_company_ids:
+            continue
         if cid not in company_map:
             company_map[cid] = acc
         elif acc.is_primary_company:
@@ -244,13 +262,12 @@ def get_user_company_departments(user_id: int, company_id: int, db: Session = De
         )
 
     # SELECT DISTINCT department_id FROM company_role_page_access
-    # WHERE company_id = :company_id AND is_granted = true
-    # Sirf is table se lo — koi fallback nahi
+    # WHERE company_id = :company_id
+    # Sirf company ke saare departments — no role/dept/desg/is_granted filter
     dept_id_rows = (
         db.query(distinct(rbac_models.CompanyRolePageAccess.department_id))
         .filter(
             rbac_models.CompanyRolePageAccess.company_id == company_id,
-            rbac_models.CompanyRolePageAccess.is_granted == True,
         )
         .all()
     )
