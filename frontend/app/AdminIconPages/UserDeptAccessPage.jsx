@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API = "http://localhost:8000/api";
+const API = "https://item-management-master-1.onrender.com/api";
 
 const C = {
   bg: "#0f1117", surface: "#1a1d27", card: "#21253a", border: "#2e3349",
