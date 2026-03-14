@@ -122,11 +122,21 @@ class WorkflowTemplate(Base):
     # which company this template belongs to (NULL = global / all companies)
     company_id   = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
 
+    # which frontend page this template is for (e.g. "item-code-creation-req")
+    # matches adminworkflowlinks.js path values
+    entity_page  = Column(String(200), nullable=True, index=True)
+
+    # who created / last updated this template
+    created_by   = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by   = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
     updated_at   = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     company      = relationship("Company", foreign_keys=[company_id])
+    creator      = relationship("User",    foreign_keys=[created_by])
+    updater      = relationship("User",    foreign_keys=[updated_by])
     steps        = relationship("WorkflowStep", back_populates="template",
                                 order_by="WorkflowStep.step_order",
                                 cascade="all, delete-orphan")
@@ -310,6 +320,49 @@ class WorkflowAction(Base):
     instance         = relationship("WorkflowInstance", back_populates="actions")
     step_instance    = relationship("WorkflowStepInstance", back_populates="actions")
     performer        = relationship("User", foreign_keys=[performed_by])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  WORKFLOW PAGE REGISTRY
+#  Audit table: which page → which template, created by whom and when.
+#  One row per (page_path, template) link.  Immutable — never updated.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class WorkflowPageRegistry(Base):
+    """
+    Audit / registry table that records every time a workflow template
+    is linked to a frontend page path.
+
+    entity_page   →  page path from adminworkflowlinks.js
+                     e.g. "item-code-creation-req"
+    template_id   →  the WorkflowTemplate that was configured for this page
+    created_by    →  admin user who created/linked the template
+    created_at    →  when the link was made
+
+    This table is APPEND-ONLY (no updates). If a template is replaced,
+    a new row is inserted and the old row's is_active is set to False.
+    """
+    __tablename__ = "wf_page_registry"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Frontend page this template is configured for
+    entity_page   = Column(String(200), nullable=False, index=True)
+    page_name     = Column(String(255), nullable=True)   # human-readable label
+
+    # The template linked to this page
+    template_id   = Column(Integer, ForeignKey("wf_template.id", ondelete="CASCADE"), nullable=False)
+
+    # Audit: who did this, when
+    created_by    = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Soft flag — False means this mapping was superseded by a newer one
+    is_active     = Column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    template      = relationship("WorkflowTemplate")
+    creator       = relationship("User", foreign_keys=[created_by])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
