@@ -39,6 +39,22 @@ const getUserDepartment = () => {
   } catch { return ''; }
 };
 
+// Extract user's primary company from session
+const getPrimaryCompany = () => {
+  try {
+    const d = JSON.parse(sessionStorage.getItem('userData') || '{}');
+    const user = d?.user;
+    if (!user) return null;
+    const primaryAccess = user.accesses?.find(a => a.is_primary_company) || user.accesses?.[0];
+    if (!primaryAccess) return null;
+    return {
+      company_id:   primaryAccess.company?.id   || primaryAccess.company_id,
+      company_name: primaryAccess.company?.company_name || primaryAccess.company_name || '',
+      company_code: primaryAccess.company?.company_code || primaryAccess.company_code || '',
+    };
+  } catch { return null; }
+};
+
 // ─── LOV Modal (reused pattern from existing pages) ───────────────────────
 const LOVModal = ({ title, items, onSelect, onClose, loading = false }) => {
   const [search, setSearch] = useState('');
@@ -152,6 +168,13 @@ const ItemCodeCreationReq = () => {
   const [optionsLoading, setOptionsLoading] = useState(false);
 
   // ── LOV modals ────────────────────────────────────────────────────────────
+  // ── dept-access grants (from UserDeptDataAccess) ──────────────
+  const [deptAccessData, setDeptAccessData] = useState([]);
+  const [deptOptions, setDeptOptions]       = useState([]);
+  const [deptAccessLoading, setDeptAccessLoading] = useState(true);
+  const hasDeptAccess = deptAccessData.length > 0;
+  const primaryCompany = getPrimaryCompany();
+
   const [modal, setModal] = useState(null);   // 'company' | 'plant' | 'itemType' | 'department'
 
   // ── image zoom modal ──────────────────────────────────────────────────────
@@ -216,17 +239,60 @@ const ItemCodeCreationReq = () => {
     setOptionsLoading(false);
   }, [user?.id]);
 
-  useEffect(() => { loadRecords(); loadCompanyOptions(); }, [loadRecords, loadCompanyOptions]);
+  // load dept-access grants
+  const loadDeptAccess = useCallback(async () => {
+    if (!user?.id) { setDeptAccessLoading(false); return; }
+    setDeptAccessLoading(true);
+    try {
+      const res  = await fetch(`${API_BASE}/item-creation-req/user/${user.id}/dept-access`);
+      const data = await res.json();
+      setDeptAccessData(Array.isArray(data) ? data : []);
+    } catch { setDeptAccessData([]); }
+    setDeptAccessLoading(false);
+  }, [user?.id]);
 
-  // ── when company changes → update plant list ──────────────────────────────
+  useEffect(() => { loadRecords(); loadCompanyOptions(); loadDeptAccess(); }, [loadRecords, loadCompanyOptions, loadDeptAccess]);
+
+  // No-dept-access case: auto-fill company; if only 1 plant -> auto-fill plant too
   useEffect(() => {
-    if (form.company_id) {
-      const co = companyOptions.find(c => c.id === form.company_id);
-      setPlantOptions(co ? co.plants : []);
-    } else {
-      setPlantOptions([]);
+    if (deptAccessLoading || optionsLoading || hasDeptAccess) return;
+    if (companyOptions.length === 0) return;
+    const co = companyOptions[0];
+    const plants = co.plants || [];
+    setPlantOptions(plants);
+    setForm(f => ({
+      ...f,
+      company_id:    co.id,
+      company_label: co.company_name,
+      ...(plants.length === 1 ? { plant_id: plants[0].id, plant_label: plants[0].plant_name } : {}),
+    }));
+  }, [deptAccessLoading, optionsLoading, hasDeptAccess, companyOptions]);
+
+  // hasDeptAccess case: auto-fill if only 1 granted company
+  useEffect(() => {
+    if (deptAccessLoading || !hasDeptAccess || deptAccessData.length !== 1) return;
+    const co = deptAccessData[0];
+    if (form.company_id === (co.company_id || co.id)) return; // already set
+    setForm(f => ({ ...f, company_id: co.company_id || co.id, company_label: co.company_name, plant_id: null, plant_label: '', department: '', department_id: null }));
+  }, [deptAccessLoading, hasDeptAccess, deptAccessData, form.company_id]);
+
+  // When company changes: update plant options; auto-fill if only 1 plant; update dept options if hasDeptAccess
+  useEffect(() => {
+    if (!form.company_id) { setPlantOptions([]); setDeptOptions([]); return; }
+    const co = companyOptions.find(c => c.id === form.company_id);
+    const plants = co ? co.plants : [];
+    setPlantOptions(plants);
+    if (hasDeptAccess) {
+      const da = deptAccessData.find(d => d.company_id === form.company_id);
+      const depts = da ? da.departments : [];
+      setDeptOptions(depts);
+      if (depts.length === 1) setForm(f => ({ ...f, department: depts[0].department_name, department_id: depts[0].id }));
+      else setForm(f => ({ ...f, department: '', department_id: null }));
     }
-  }, [form.company_id, companyOptions]);
+    if (plants.length === 1 && !form.plant_id) {
+      setForm(f => ({ ...f, plant_id: plants[0].id, plant_label: plants[0].plant_name }));
+    }
+  }, [form.company_id, companyOptions, deptAccessData, hasDeptAccess]);
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const showToast = (msg, type = 'success') => setToast({ msg, type });
@@ -626,27 +692,58 @@ const ItemCodeCreationReq = () => {
           <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 10 }}>
             🏢 Company & Plant (Based on Your Access)
           </div>
-          {optionsLoading ? (
+          {(optionsLoading || deptAccessLoading) ? (
             <div style={{ fontSize: 11, color: '#6b7280', padding: 8 }}>Loading your company access…</div>
-          ) : companyOptions.length === 0 ? (
+          ) : (hasDeptAccess ? deptAccessData.length === 0 : companyOptions.length === 0) ? (
             <div style={{ fontSize: 11, color: '#dc2626', padding: 8 }}>⚠️ No company access found. Contact administrator.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
-              {lovField('Company', 'company_label', 'company', true)}
-              {/* Plant – disabled until company is selected */}
+              {/* Company: auto-filled readonly if 1 option (no dept access), LOV if dept access or multiple */}
+              {hasDeptAccess ? (
+                deptAccessData.length === 1
+                  ? (() => { const co = deptAccessData[0]; return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Company <span style={{ color: '#dc2626' }}>*</span></label>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <input readOnly value={form.company_label || co.company_name} style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: '#f0fdf4', cursor: 'default' }} />
+                        <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
+                      </div>
+                    </div>
+                  ); })()
+                  : lovField('Company', 'company_label', 'company', true)
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Company <span style={{ color: '#dc2626' }}>*</span></label>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input readOnly value={form.company_label} placeholder="Loading…" style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.company_label ? '#f0fdf4' : '#f9fafb', cursor: 'default' }} />
+                    {form.company_label && <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>}
+                  </div>
+                </div>
+              )}
+              {/* Plant: auto if 1, LOV if multiple, disabled if no company */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ fontSize: 11, color: form.company_id ? '#000' : '#9ca3af', minWidth: 130 }}>Plant <span style={{ color: '#6b7280', fontSize: 10 }}>(Optional)</span></label>
                 <div style={{ position: 'relative', flex: 1 }}>
-                  <input readOnly value={form.plant_label} placeholder={form.company_id ? 'Select Plant' : 'Select Company first'}
-                    onClick={() => { if (form.company_id) setModal('plant'); }}
-                    style={{ width: '100%', padding: '4px 45px 4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, cursor: form.company_id ? 'pointer' : 'not-allowed', color: form.company_id ? '#000' : '#9ca3af', background: form.company_id ? '#fff' : '#f3f4f6' }} />
-                  {form.plant_label && form.company_id && (
-                    <button onClick={() => setForm(f => ({ ...f, plant_id: null, plant_label: '' }))}
-                      style={{ position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
-                      <X size={12} color='#ef4444' />
-                    </button>
+                  {plantOptions.length === 1 ? (
+                    <>
+                      <input readOnly value={form.plant_label}
+                        style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: '#f0fdf4', cursor: 'default' }} />
+                      <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
+                    </>
+                  ) : (
+                    <>
+                      <input readOnly value={form.plant_label} placeholder={form.company_id ? (plantOptions.length === 0 ? 'No plants available' : 'Select Plant') : 'Select Company first'}
+                        onClick={() => { if (form.company_id && plantOptions.length > 0) setModal('plant'); }}
+                        style={{ width: '100%', padding: '4px 45px 4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, cursor: (form.company_id && plantOptions.length > 0) ? 'pointer' : 'not-allowed', color: form.company_id ? '#000' : '#9ca3af', background: form.company_id ? '#fff' : '#f3f4f6' }} />
+                      {form.plant_label && form.company_id && (
+                        <button onClick={() => setForm(f => ({ ...f, plant_id: null, plant_label: '' }))}
+                          style={{ position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                          <X size={12} color='#ef4444' />
+                        </button>
+                      )}
+                      <Search size={13} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: (form.company_id && plantOptions.length > 0) ? '#999' : '#d1d5db' }} />
+                    </>
                   )}
-                  <Search size={13} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: form.company_id ? '#999' : '#d1d5db' }} />
                 </div>
               </div>
             </div>
@@ -662,21 +759,27 @@ const ItemCodeCreationReq = () => {
             {inp('Item Name', 'item_name', { required: true })}
             {inp('Item Short Name', 'item_short_name', { required: true })}
             {lovField('Item Type', 'item_type', 'itemType', true)}
-            {/* Department – auto-filled from user session, readonly */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Department <span style={{ color: '#dc2626' }}>*</span></label>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <input
-                  readOnly
-                  value={form.department}
-                  placeholder="Department (auto from profile)"
-                  style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.department ? '#f0fdf4' : '#f9fafb', cursor: 'default' }}
-                />
-                {form.department && (
-                  <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
-                )}
+            {/* Department: auto if 1 option (hasDeptAccess), LOV if multiple, readonly from session if no access */}
+            {hasDeptAccess ? (
+              deptOptions.length === 1 ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Department <span style={{ color: '#dc2626' }}>*</span></label>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input readOnly value={form.department} style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: '#f0fdf4', cursor: 'default' }} />
+                    <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
+                  </div>
+                </div>
+              ) : lovField('Department', 'department', 'department', true)
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Department <span style={{ color: '#dc2626' }}>*</span></label>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input readOnly value={form.department} placeholder="Department (auto from profile)"
+                    style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.department ? '#f0fdf4' : '#f9fafb', cursor: 'default' }} />
+                  {form.department && <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>}
+                </div>
               </div>
-            </div>
+            )}
             {inp('Required Date', 'required_date', { type: 'date', required: true })}
           </div>
           <div style={{ marginTop: 8 }}>
