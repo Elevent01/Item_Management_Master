@@ -526,14 +526,10 @@ const ItemCodeCreationReq = () => {
               <X size={12} color="#ef4444" />
             </button>
           )}
-          {isSingleCompany ? (
-            <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
-          ) : (
-            <button onClick={handleLovClick}
-              style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer' }}>
-              <Search size={13} color="#999" />
-            </button>
-          )}
+          <button onClick={handleLovClick}
+            style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: isSingleCompany ? 'default' : 'pointer' }}>
+            <Search size={13} color="#999" />
+          </button>
         </div>
       </div>
     );
@@ -705,11 +701,8 @@ const ItemCodeCreationReq = () => {
                   readOnly
                   value={form.department}
                   placeholder="Department (auto from profile)"
-                  style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: form.department ? '#f0fdf4' : '#f9fafb', cursor: 'default' }}
+                  style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: '#fff', cursor: 'default' }}
                 />
-                {form.department && (
-                  <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
-                )}
               </div>
             </div>
             {inp('Required Date', 'required_date', { type: 'date', required: true })}
