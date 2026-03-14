@@ -294,7 +294,11 @@ function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplM
   return <Modal title={isEdit ? 'Edit Template' : 'New Workflow Template'} onClose={() => setTmplModal(null)}>
     <Field label="Name *">
       <input value={form.name} onChange={e => {
-        const name = e.target.value;
+        const raw = e.target.value;
+        // No double spaces; capitalize first letter of each word
+        const name = raw
+          .replace(/  +/g, ' ')           // max one space
+          .replace(/(^|\s)(\S)/g, (_, sp, ch) => sp + ch.toUpperCase()); // capitalize after space + first char
         const slug = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 12) || 'TEMPLATE';
         const uid  = Math.random().toString(36).substring(2, 6).toUpperCase();
         const autoCode = `WRKFLW-${slug}-${uid}`;
