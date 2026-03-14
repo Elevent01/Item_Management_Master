@@ -1,178 +1,74 @@
-// app/utils/rbacLinkFilter.js
+// app/utils/rbacMenuLoader.js
 /**
- * 🔥 RBAC Link Filter - Smart Filtering System
+ * 🔥 RBAC Menu Loader - Smart Filtering System
  * Filters config links based on backend RBAC permissions
- * Works with existing icon system without breaking it
+ *
+ * ✅ FIX: Ab yeh apni alag API call NAHI karta
+ * rbacCache.js se shared data leta hai — sirf 1 API call hoti hai
  */
 
-const API_BASE = 'https://item-management-master-1.onrender.com/api';
+// ✅ Import from rbacCache — shared cache use karo, duplicate call nahi
+import { getAccessiblePages, filterIconPagesFromCache } from './rbacCache';
 
 /**
  * Main function: Filter any link array based on user's accessible pages
+ * ✅ Uses shared rbacCache — NO duplicate API call
  */
 export async function filterLinksByAccess(linksArray) {
   try {
-    console.log('🔍 [FILTER] Starting link filtering...');
-    console.log('📦 [FILTER] Input links:', linksArray.length);
+    console.log('🔍 [MENU LOADER] Starting link filtering...');
+    console.log('📦 [MENU LOADER] Input links:', linksArray.length);
 
-    // Get user's accessible pages from backend
-    const accessiblePages = await getUserAccessiblePages();
-    
+    // ✅ rbacCache se lo — yeh already deduplicated hai
+    const accessiblePages = await getAccessiblePages();
+
     if (!accessiblePages || accessiblePages.length === 0) {
-      console.warn('⚠️ [FILTER] No accessible pages found');
-      return []; // Return empty if no access
+      console.warn('⚠️ [MENU LOADER] No accessible pages found');
+      return [];
     }
 
-    console.log('✅ [FILTER] Accessible pages:', accessiblePages.length);
+    console.log('✅ [MENU LOADER] Accessible pages:', accessiblePages.length);
 
-    // Filter links that match accessible pages
     const filteredLinks = linksArray.filter(link => {
-      // Check if link's path matches any accessible page URL
       const isAccessible = accessiblePages.some(page => {
-        // Match by path
-        if (page.page_url.includes(link.path)) return true;
-        
-        // Match by name (case-insensitive)
-        if (page.page_name.toLowerCase().includes(link.name.toLowerCase())) return true;
-        
+        if (page.page_url?.includes(link.path)) return true;
+        if (page.page_name?.toLowerCase().includes(link.name?.toLowerCase())) return true;
         return false;
       });
 
       if (isAccessible) {
-        console.log('✅ [FILTER] Access granted:', link.name);
+        console.log('✅ [MENU LOADER] Access granted:', link.name);
       } else {
-        console.log('❌ [FILTER] Access denied:', link.name);
+        console.log('❌ [MENU LOADER] Access denied:', link.name);
       }
 
       return isAccessible;
     });
 
-    console.log('🎯 [FILTER] Filtered links:', filteredLinks.length);
+    console.log('🎯 [MENU LOADER] Filtered links:', filteredLinks.length);
     return filteredLinks;
 
   } catch (error) {
-    console.error('❌ [FILTER] Error:', error);
-    // On error, return empty array (safe fallback)
-    return [];
-  }
-}
-
-/**
- * Get all accessible page URLs for current user
- */
-async function getUserAccessiblePages() {
-  try {
-    const storedUser = sessionStorage.getItem('userData');
-    if (!storedUser) {
-      console.error('❌ [FILTER] No user data in session');
-      return [];
-    }
-
-    const parsed = JSON.parse(storedUser);
-    let user = parsed?.user;
-
-    if (!user || !user.id) {
-      console.error('❌ [FILTER] Invalid user data');
-      return [];
-    }
-
-    // If accesses missing, fetch from backend
-    if (!user.accesses || user.accesses.length === 0) {
-      console.log('⚠️ [FILTER] Fetching user details...');
-      const userDetailsRes = await fetch(`${API_BASE}/users/${user.id}`);
-      if (userDetailsRes.ok) {
-        user = await userDetailsRes.json();
-        parsed.user = user;
-        sessionStorage.setItem('userData', JSON.stringify(parsed));
-      }
-    }
-
-    if (!user.accesses || user.accesses.length === 0) {
-      console.error('❌ [FILTER] No company access found');
-      return [];
-    }
-
-    const primaryAccess = user.accesses.find(acc => acc.is_primary_company) || user.accesses[0];
-    const primaryCompanyId = primaryAccess.company?.id;
-
-    if (!primaryCompanyId) {
-      console.error('❌ [FILTER] No company ID');
-      return [];
-    }
-
-    // Fetch accessible menu
-    const menuUrl = `${API_BASE}/rbac/users/${user.id}/accessible-menu?company_id=${primaryCompanyId}`;
-    const menuRes = await fetch(menuUrl);
-
-    if (!menuRes.ok) {
-      console.error('❌ [FILTER] Failed to fetch menu');
-      return [];
-    }
-
-    const menuJson = await menuRes.json();
-
-    // Flatten all pages from hierarchical menu
-    const allPages = [];
-    const flattenPages = (pages) => {
-      pages.forEach(page => {
-        allPages.push(page);
-        if (page.children && page.children.length > 0) {
-          flattenPages(page.children);
-        }
-      });
-    };
-
-    if (menuJson.menu && menuJson.menu.length > 0) {
-      flattenPages(menuJson.menu);
-    }
-
-    console.log('✅ [FILTER] Total accessible pages:', allPages.length);
-    return allPages;
-
-  } catch (error) {
-    console.error('❌ [FILTER] Error fetching accessible pages:', error);
+    console.error('❌ [MENU LOADER] Error:', error);
     return [];
   }
 }
 
 /**
  * Filter icon pages (maintains structure with nested links)
+ * ✅ Uses shared rbacCache — NO duplicate API call
  */
-export async function filterIconPages(iconPages) {
+export async function filterIconPages(iconPagesArr) {
   try {
-    console.log('🔍 [FILTER] Filtering icon pages...');
-    
-    const accessiblePages = await getUserAccessiblePages();
-    
-    if (!accessiblePages || accessiblePages.length === 0) {
-      return [];
-    }
+    console.log('🔍 [MENU LOADER] Filtering icon pages...');
 
-    // Filter each icon page's links
-    const filtered = await Promise.all(
-      iconPages.map(async (iconPage) => {
-        // Filter the links inside this icon page
-        const filteredLinks = await filterLinksByAccess(iconPage.links || []);
-        
-        // Only include icon page if it has accessible links
-        if (filteredLinks.length > 0) {
-          return {
-            ...iconPage,
-            links: filteredLinks
-          };
-        }
-        return null;
-      })
-    );
+    const result = await filterIconPagesFromCache(iconPagesArr);
 
-    // Remove null entries (icon pages with no accessible links)
-    const result = filtered.filter(page => page !== null);
-    
-    console.log('✅ [FILTER] Filtered icon pages:', result.length);
+    console.log('✅ [MENU LOADER] Filtered icon pages:', result.length);
     return result;
 
   } catch (error) {
-    console.error('❌ [FILTER] Error filtering icon pages:', error);
+    console.error('❌ [MENU LOADER] Error filtering icon pages:', error);
     return [];
   }
 }
@@ -182,30 +78,30 @@ export async function filterIconPages(iconPages) {
  */
 export async function hasAccessToLink(linkPath) {
   try {
-    const accessiblePages = await getUserAccessiblePages();
-    return accessiblePages.some(page => page.page_url.includes(linkPath));
+    const accessiblePages = await getAccessiblePages();
+    return accessiblePages.some(page => page.page_url?.includes(linkPath));
   } catch (error) {
-    console.error('❌ [FILTER] Error checking access:', error);
+    console.error('❌ [MENU LOADER] Error checking access:', error);
     return false;
   }
 }
 
 /**
- * Get filtered links with caching (for performance)
+ * Get filtered links with in-memory caching
  */
 const linkCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export async function getFilteredLinksWithCache(linksArray, cacheKey) {
   const cached = linkCache.get(cacheKey);
-  
+
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    console.log('✅ [FILTER] Using cached links');
+    console.log('✅ [MENU LOADER] Using cached links');
     return cached.links;
   }
 
   const filtered = await filterLinksByAccess(linksArray);
-  
+
   linkCache.set(cacheKey, {
     links: filtered,
     timestamp: Date.now()
@@ -219,5 +115,5 @@ export async function getFilteredLinksWithCache(linksArray, cacheKey) {
  */
 export function clearLinkCache() {
   linkCache.clear();
-  console.log('🗑️ [FILTER] Cache cleared');
+  console.log('🗑️ [MENU LOADER] Cache cleared');
 }
