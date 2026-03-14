@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API = "https://item-management-master-1.onrender.com/api";
+const API = "http://localhost:8000/api";
 
 const C = {
   bg: "#0f1117", surface: "#1a1d27", card: "#21253a", border: "#2e3349",
@@ -173,7 +173,21 @@ export default function UserDeptAccessPage() {
     safeFetch(`${API}/user-dept-access/user/${selectedUser.id}/company/${activeCompany.company_id}/departments`)
       .then(({ data, error }) => {
         if (error) { setDeptsErr(error); setDepts([]); setGrantedDeptIds([]); }
-        else { setDepts(data?.departments || []); setGrantedDeptIds(data?.granted_dept_ids || []); }
+        else {
+          const allDepts = data?.departments || [];
+          const alreadyGranted = data?.granted_dept_ids || [];
+          // Auto-include user's own department (from role-access) if present in this company's dept list
+          const userOwnDeptName = activeCompany.department_name || "";
+          const userOwnDept = allDepts.find(d =>
+            d.department_name && userOwnDeptName &&
+            d.department_name.toLowerCase() === userOwnDeptName.toLowerCase()
+          );
+          const autoIds = userOwnDept && !alreadyGranted.includes(userOwnDept.id)
+            ? [...alreadyGranted, userOwnDept.id]
+            : alreadyGranted;
+          setDepts(allDepts);
+          setGrantedDeptIds(autoIds);
+        }
         setLoadingDepts(false);
       });
   }, [selectedUser, activeCompany]);
@@ -220,13 +234,13 @@ export default function UserDeptAccessPage() {
       {/* Toast */}
       {toast && (
         <div style={{
-          position: "fixed", top: 14, right: 14, zIndex: 9999,
-          padding: "8px 16px", borderRadius: 7,
+          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          zIndex: 9999, padding: "12px 24px", borderRadius: 8,
           background: toast.ok ? C.greenSoft : C.redSoft,
           color: toast.ok ? C.green : C.red,
           border: `1px solid ${toast.ok ? C.green : C.red}44`,
-          fontSize: 11, fontWeight: 500,
-          boxShadow: "0 6px 20px #0008",
+          fontSize: 12, fontWeight: 600,
+          boxShadow: "0 8px 32px #0009",
         }}>{toast.msg}</div>
       )}
 
