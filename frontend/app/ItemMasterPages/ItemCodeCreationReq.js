@@ -228,6 +228,23 @@ const ItemCodeCreationReq = () => {
     }
   }, [form.company_id, companyOptions]);
 
+  // ── auto-set company if user has access to only one company ───────────────
+  useEffect(() => {
+    if (companyOptions.length === 1) {
+      const co = companyOptions[0];
+      setForm(f => {
+        if (f.company_id) return f;
+        return {
+          ...f,
+          company_id:    co.id,
+          company_label: co.company_name,
+          plant_id:      null,
+          plant_label:   '',
+        };
+      });
+    }
+  }, [companyOptions]);
+
   // ── helpers ───────────────────────────────────────────────────────────────
   const showToast = (msg, type = 'success') => setToast({ msg, type });
 
@@ -475,34 +492,42 @@ const ItemCodeCreationReq = () => {
     </div>
   );
 
-  const lovField = (label, displayKey, modalKey, required = false) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>{label}{required && <span style={{ color: '#dc2626' }}> *</span>}</label>
-      <div style={{ position: 'relative', flex: 1 }}>
-        <input readOnly value={form[displayKey]} placeholder={`Select ${label}`}
-          onClick={() => setModal(modalKey)}
-          style={{ width: '100%', padding: '4px 45px 4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, cursor: 'pointer', color: '#000' }} />
-        {form[displayKey] && (
-          <button onClick={() => {
-            const clearMap = {
-              company_label: { company_id: null, company_label: '' },
-              plant_label:   { plant_id: null,   plant_label: '' },
-              item_type:     { item_type: '' },
-              department:    { department: '' },
-            };
-            setForm(f => ({ ...f, ...(clearMap[displayKey] || { [displayKey]: '' }) }));
-          }}
-            style={{ position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
-            <X size={12} color="#ef4444" />
-          </button>
-        )}
-        <button onClick={() => setModal(modalKey)}
-          style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer' }}>
-          <Search size={13} color="#999" />
-        </button>
+  const lovField = (label, displayKey, modalKey, required = false) => {
+    const isSingleCompany = modalKey === 'company' && companyOptions.length === 1;
+    const handleLovClick = () => { if (!isSingleCompany) setModal(modalKey); };
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>{label}{required && <span style={{ color: '#dc2626' }}> *</span>}</label>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <input readOnly value={form[displayKey]} placeholder={`Select ${label}`}
+            onClick={handleLovClick}
+            style={{ width: '100%', padding: '4px 45px 4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, cursor: isSingleCompany ? 'default' : 'pointer', color: '#000' }} />
+          {form[displayKey] && !isSingleCompany && (
+            <button onClick={() => {
+              const clearMap = {
+                company_label: { company_id: null, company_label: '' },
+                plant_label:   { plant_id: null,   plant_label: '' },
+                item_type:     { item_type: '' },
+                department:    { department: '' },
+              };
+              setForm(f => ({ ...f, ...(clearMap[displayKey] || { [displayKey]: '' }) }));
+            }}
+              style={{ position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+              <X size={12} color="#ef4444" />
+            </button>
+          )}
+          {isSingleCompany ? (
+            <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#16a34a', fontWeight: 600 }}>AUTO</span>
+          ) : (
+            <button onClick={handleLovClick}
+              style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              <Search size={13} color="#999" />
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ── image upload helper ──────────────────────────────────────────────────
   const handleImageUpload = (fieldKey, file) => {
