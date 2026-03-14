@@ -153,11 +153,6 @@ const ItemCodeCreationReq = () => {
 
   // ── form state ────────────────────────────────────────────────────────────
   const userDepartment  = getUserDepartment();
-  // Departments for currently selected company from dept-access API
-  const activeDepts  = form.company_id ? (deptAccessMap[form.company_id] || []) : [];
-  // Map to LOV format { code, name }
-  const userDepartments = activeDepts.map(d => ({ code: String(d.id), name: d.department_name }));
-  const isSingleDept    = userDepartments.length <= 1;
 
   const emptyForm = {
     item_name: '', item_description: '', item_short_name: '',
@@ -175,6 +170,12 @@ const ItemCodeCreationReq = () => {
   const [optionsLoading, setOptionsLoading] = useState(false);
   // dept-access map: { [company_id]: [{id, department_name}] }
   const [deptAccessMap, setDeptAccessMap]   = useState({});
+
+  // Departments for currently selected company from dept-access API
+  const activeDepts     = form.company_id ? (deptAccessMap[form.company_id] || []) : [];
+  // Map to LOV format { code, name }
+  const userDepartments = activeDepts.map(d => ({ code: String(d.id), name: d.department_name }));
+  const isSingleDept    = userDepartments.length <= 1;
 
   // ── LOV modals ────────────────────────────────────────────────────────────
   const [modal, setModal] = useState(null);   // 'company' | 'plant' | 'itemType' | 'department'
