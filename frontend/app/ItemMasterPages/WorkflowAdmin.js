@@ -292,11 +292,18 @@ function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplM
     } catch (e) { showToast(e.message, 'error'); }
   };
   return <Modal title={isEdit ? 'Edit Template' : 'New Workflow Template'} onClose={() => setTmplModal(null)}>
-    <Field label="Code *" hint="e.g. ITEM_CREATION">
-      <input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} disabled={isEdit} style={inp(isEdit)} />
-    </Field>
     <Field label="Name *">
-      <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp()} />
+      <input value={form.name} onChange={e => {
+        const name = e.target.value;
+        const autoCode = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        setForm(f => ({ ...f, name, code: f._codeManuallyEdited ? f.code : autoCode }));
+      }} style={inp()} />
+    </Field>
+    <Field label="Code *" hint="auto-generated · editable">
+      <input value={form.code}
+        onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase(), _codeManuallyEdited: true }))}
+        disabled={isEdit}
+        style={{ ...inp(isEdit), background: isEdit ? '#f3f4f6' : '#f0fdf4', color: '#166534', fontWeight: 600, fontFamily: 'monospace' }} />
     </Field>
     <Field label="Description">
       <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp(), resize: 'vertical' }} />
