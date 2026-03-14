@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { adminworkflowlinks } from '../config/adminworkflowlinks.js';
 import {
   Plus, Edit2, Trash2, ChevronDown, ChevronRight,
   Save, X, RefreshCw, CheckCircle, AlertCircle,
@@ -46,6 +47,9 @@ export default function WorkflowAdmin() {
   const [toast, setToast]           = useState(null);
   const [loading, setLoading]       = useState(false);
 
+  // page selection
+  const [selectedPage, setSelectedPage] = useState(null);  // { name, path } from adminworkflowlinks
+
   // modals
   const [tmplModal, setTmplModal]   = useState(null);  // null | 'create' | {id, ...}
   const [stepModal, setStepModal]   = useState(null);  // null | {template_id} | {step}
@@ -60,21 +64,29 @@ export default function WorkflowAdmin() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [tRes, rRes, dRes, dgRes, cRes] = await Promise.all([
+      const [tRes, cRes] = await Promise.all([
         fetch(`${API_BASE}/workflow/templates/`),
-        fetch(`${API_BASE}/roles`),
-        fetch(`${API_BASE}/departments`),
-        fetch(`${API_BASE}/designations`),
         fetch(`${API_BASE}/companies`),
       ]);
-      const [tData, rData, dData, dgData, cData] = await Promise.all([
-        tRes.json(), rRes.json(), dRes.json(), dgRes.json(), cRes.json()
-      ]);
+      const [tData, cData] = await Promise.all([tRes.json(), cRes.json()]);
       setTemplates(Array.isArray(tData) ? tData : []);
-      setRoles(Array.isArray(rData) ? rData : []);
-      setDepts(Array.isArray(dData) ? dData : []);
-      setDesgs(Array.isArray(dgData) ? dgData : []);
-      setCompanies(Array.isArray(cData) ? (cData[0]?.data || cData) : []);
+      const compList = Array.isArray(cData) ? (cData[0]?.data || cData) : [];
+      setCompanies(compList);
+      if (compList.length > 0) {
+        const rbacResults = await Promise.all(
+          compList.map(c => fetch(`${API_BASE}/companies/${c.id}/rbac-options`).then(r => r.json()).catch(() => null))
+        );
+        const rolesMap = {}, deptsMap = {}, desgsMap = {};
+        rbacResults.forEach(res => {
+          if (!res) return;
+          (res.roles        || []).forEach(r => { rolesMap[r.id] = r; });
+          (res.departments  || []).forEach(d => { deptsMap[d.id] = d; });
+          (res.designations || []).forEach(d => { desgsMap[d.id] = d; });
+        });
+        setRoles(Object.values(rolesMap));
+        setDepts(Object.values(deptsMap));
+        setDesgs(Object.values(desgsMap));
+      }
     } catch { showToast('Failed to load data', 'error'); }
     finally { setLoading(false); }
   }, []);
@@ -131,6 +143,19 @@ export default function WorkflowAdmin() {
     loadAll();
   };
 
+  // ─── Accessible pages for current user ──────────────────────────────────
+  const accessiblePages = React.useMemo(() => {
+    if (!user) return [];
+    const userPaths = new Set(
+      (user.accesses || []).flatMap(a =>
+        (a.accessible_pages || []).map(p => p.page_url?.replace(/^.*\//, ''))
+      )
+    );
+    // If user has no page access info, show all pages (fallback)
+    if (userPaths.size === 0) return adminworkflowlinks;
+    return adminworkflowlinks.filter(pg => userPaths.has(pg.path));
+  }, [user]);
+
   // ─── Header ─────────────────────────────────────────────────────────────
   const renderHeader = () => (
     <div>
@@ -140,22 +165,78 @@ export default function WorkflowAdmin() {
           <button onClick={loadAll} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
             <RefreshCw size={11} /> Refresh
           </button>
-          <button onClick={() => setTmplModal('create')} style={{ background: '#3b82f6', border: 'none', color: '#fff', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Plus size={11} /> New Template
-          </button>
+          {selectedPage && (
+            <button onClick={() => setTmplModal('create')} style={{ background: '#3b82f6', border: 'none', color: '#fff', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Plus size={11} /> New Template
+            </button>
+          )}
         </div>
       </div>
       <div style={{ background: 'linear-gradient(to right, #60a5fa, #374151)', height: 4 }} />
+
+      {/* ── Page selector bar ── */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>📄 Select Page:</span>
+        <select
+          value={selectedPage?.path || ''}
+          onChange={e => {
+            const pg = adminworkflowlinks.find(p => p.path === e.target.value) || null;
+            setSelectedPage(pg);
+          }}
+          style={{ flex: 1, maxWidth: 320, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 11, color: '#111', background: '#fff' }}
+        >
+          <option value="">— Select a page first —</option>
+          {adminworkflowlinks.map(pg => {
+            const hasTmpl = templates.some(t => t.entity_page === pg.path || t.code.includes(pg.path.toUpperCase().replace(/-/g,'_')));
+            return (
+              <option key={pg.path} value={pg.path}>
+                {pg.name}{hasTmpl ? ' ✓' : ''}
+              </option>
+            );
+          })}
+        </select>
+        {selectedPage && (
+          <span style={{ fontSize: 10, color: '#6b7280' }}>{selectedPage.description}</span>
+        )}
+      </div>
     </div>
   );
 
   // ─── Template list ───────────────────────────────────────────────────────
-  const renderTemplates = () => (
+  const renderTemplates = () => {
+    if (!selectedPage) {
+      return (
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 60 }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>👆</div>
+          Select a page above to view and manage its workflow templates
+        </div>
+      );
+    }
+    const pageSlug = selectedPage.path.toUpperCase().replace(/-/g, '_');
+    const filtered = templates.filter(t =>
+      t.entity_page === selectedPage.path ||
+      t.code.includes(pageSlug) ||
+      t.name.toLowerCase().includes(selectedPage.name.toLowerCase())
+    );
+    return (
     <div style={{ padding: 16 }}>
-      {templates.length === 0 && !loading && (
-        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 40 }}>No workflow templates yet. Click "+ New Template" to create one.</div>
+      {/* Page info bar */}
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '8px 12px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#1d4ed8' }}>
+          📄 {selectedPage.name} — Workflow Templates
+        </span>
+        <span style={{ fontSize: 10, color: '#6b7280' }}>{filtered.length} template{filtered.length !== 1 ? 's' : ''} configured</span>
+      </div>
+      {filtered.length === 0 && !loading && (
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 40 }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>⚙️</div>
+          <p style={{ margin: '0 0 12px' }}>No workflow templates configured for <b>"{selectedPage.name}"</b> yet.</p>
+          <button onClick={() => setTmplModal('create')} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, padding: '6px 14px', fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Plus size={11} /> Create Template for this Page
+          </button>
+        </div>
       )}
-      {templates.map(tmpl => (
+      {filtered.map(tmpl => (
         <div key={tmpl.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
           {/* Template row */}
           <div
@@ -241,12 +322,13 @@ export default function WorkflowAdmin() {
         </div>
       ))}
     </div>
-  );
+    );
+  };
 
   // ─── MODALS ──────────────────────────────────────────────────────────────
   const renderTemplateModal = () => {
     if (!tmplModal) return null;
-    return <TemplateModal tmplModal={tmplModal} companies={companies} saveTemplate={saveTemplate} showToast={showToast} setTmplModal={setTmplModal} loadAll={loadAll} />;
+    return <TemplateModal tmplModal={tmplModal} companies={companies} saveTemplate={saveTemplate} showToast={showToast} setTmplModal={setTmplModal} loadAll={loadAll} selectedPage={selectedPage} />;
   };
 
   const renderStepModal = () => {
@@ -273,17 +355,27 @@ export default function WorkflowAdmin() {
 
 // ─── Modal Sub-Components (hooks must be at top-level of a component) ─────────
 
-function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplModal, loadAll }) {
+function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplModal, loadAll, selectedPage }) {
   const isEdit = typeof tmplModal === 'object' && tmplModal.id;
+
+  // Auto-generate name and code from selectedPage when creating new
+  const autoName = (!isEdit && selectedPage)
+    ? selectedPage.name + ' Workflow'
+    : (tmplModal?.name || '');
+  const autoSlug = autoName.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 12) || 'TEMPLATE';
+  const autoUid  = React.useMemo(() => Math.random().toString(36).substring(2, 6).toUpperCase(), []);
+  const autoCode = (!isEdit && selectedPage) ? `WRKFLW-${autoSlug}-${autoUid}` : (tmplModal?.code || '');
+
   const [form, setForm] = React.useState({
-    code:        tmplModal?.code        || '',
-    name:        tmplModal?.name        || '',
-    description: tmplModal?.description || '',
+    code:        autoCode,
+    name:        autoName,
+    description: tmplModal?.description || (selectedPage ? `Workflow for ${selectedPage.name}` : ''),
     company_id:  tmplModal?.company_id  || '',
+    entity_page: selectedPage?.path     || tmplModal?.entity_page || '',
   });
   const onSave = async () => {
     try {
-      const data = { ...form, company_id: form.company_id || null };
+      const data = { ...form, company_id: form.company_id || null, entity_page: form.entity_page || null };
       if (isEdit) data.id = tmplModal.id;
       await saveTemplate(data);
       showToast(isEdit ? 'Template updated' : 'Template created');
@@ -292,6 +384,11 @@ function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplM
     } catch (e) { showToast(e.message, 'error'); }
   };
   return <Modal title={isEdit ? 'Edit Template' : 'New Workflow Template'} onClose={() => setTmplModal(null)}>
+    {!isEdit && selectedPage && (
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 5, padding: '6px 10px', marginBottom: 10, fontSize: 10, color: '#1d4ed8' }}>
+        📄 Page: <b>{selectedPage.name}</b> — Name and code are auto-filled. You can edit them if needed.
+      </div>
+    )}
     <Field label="Name *">
       <input value={form.name} onChange={e => {
         const raw = e.target.value;
