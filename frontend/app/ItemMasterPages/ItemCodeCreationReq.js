@@ -248,7 +248,17 @@ const ItemCodeCreationReq = () => {
   // ── helpers ───────────────────────────────────────────────────────────────
   const showToast = (msg, type = 'success') => setToast({ msg, type });
 
-  const openCreate = () => { setForm({ ...emptyForm }); setEditId(null); setView('form'); };
+  const openCreate = () => {
+    const base = { ...emptyForm };
+    if (companyOptions.length === 1) {
+      const co = companyOptions[0];
+      base.company_id    = co.id;
+      base.company_label = co.company_name;
+    }
+    setForm(base);
+    setEditId(null);
+    setView('form');
+  };
 
   const openEdit = (rec) => {
     setForm({
