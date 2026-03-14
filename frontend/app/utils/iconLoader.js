@@ -47,7 +47,12 @@ const discoverAllConfigs = () => {
           const baseName = configName.replace(/Links$/, '');
 
           // Create Master name: 'abc' → 'AbcMaster'
-          const masterName = baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Master';
+          // 🔥 FIX: Agar baseName already 'Master' pe khatam hota hai (e.g. 'adminMaster'),
+          // toh dobara 'Master' mat lagao — warna 'AdminMasterMaster' ban jaata hai
+          const capitalizedBase = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+          const masterName = capitalizedBase.endsWith('Master')
+            ? capitalizedBase
+            : capitalizedBase + 'Master';
 
           // Create path: 'abc' → 'icon-abc'
           const pathName = baseName
