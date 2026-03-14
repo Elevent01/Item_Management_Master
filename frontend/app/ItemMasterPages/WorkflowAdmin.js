@@ -296,14 +296,12 @@ function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplM
       <input value={form.name} onChange={e => {
         const name = e.target.value;
         const autoCode = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-        setForm(f => ({ ...f, name, code: f._codeManuallyEdited ? f.code : autoCode }));
+        setForm(f => ({ ...f, name, code: autoCode }));
       }} style={inp()} />
     </Field>
-    <Field label="Code *" hint="auto-generated · editable">
-      <input value={form.code}
-        onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase(), _codeManuallyEdited: true }))}
-        disabled={isEdit}
-        style={{ ...inp(isEdit), background: isEdit ? '#f3f4f6' : '#f0fdf4', color: '#166534', fontWeight: 600, fontFamily: 'monospace' }} />
+    <Field label="Code *" hint="auto-generated from name">
+      <input value={form.code} readOnly
+        style={{ ...inp(true), background: '#f0fdf4', color: '#166534', fontWeight: 600, fontFamily: 'monospace', cursor: 'default' }} />
     </Field>
     <Field label="Description">
       <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp(), resize: 'vertical' }} />
