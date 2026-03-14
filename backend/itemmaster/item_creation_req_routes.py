@@ -63,12 +63,19 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
     Returns the list of companies (and their plants) that the logged-in user
     has been granted access to  –  used to populate the Company / Plant
     dropdowns on the Item Code Creation Request form.
+
+    Sources (merged, no duplicates):
+      1. UserCompanyAccess  – companies where is_primary_company = True
+      2. UserDeptDataAccess – companies where is_granted = True
+         (added by admin via UserDeptAccessPage)
+
+    Plants come from UserCompanyAccess rows for the matched company.
     """
     user = db.query(user_models.User).filter(user_models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Step 1 — find which company is the user's PRIMARY company
+    # ── Source 1: primary companies from UserCompanyAccess ────────────────────
     primary_accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(
@@ -79,36 +86,49 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
     )
     primary_company_ids = {acc.company_id for acc in primary_accesses}
 
-    # Step 2 — fetch ALL access rows for those primary companies
-    # (plant access rows may not be flagged is_primary_company)
+    # ── Source 2: companies from UserDeptDataAccess (is_granted = True) ───────
+    dept_access_rows = (
+        db.query(dept_models.UserDeptDataAccess)
+        .filter(
+            dept_models.UserDeptDataAccess.user_id == user_id,
+            dept_models.UserDeptDataAccess.is_granted == True,
+        )
+        .all()
+    )
+    dept_access_company_ids = {row.company_id for row in dept_access_rows}
+
+    # Merge both sources
+    all_company_ids = primary_company_ids | dept_access_company_ids
+
+    if not all_company_ids:
+        return []
+
+    # ── Build company_map ─────────────────────────────────────────────────────
+    company_map: dict[int, dict] = {}
+    for cid in all_company_ids:
+        company = db.query(models.Company).filter(models.Company.id == cid).first()
+        if not company:
+            continue
+        company_map[cid] = {
+            "id":           company.id,
+            "company_name": company.company_name,
+            "company_code": company.company_code,
+            "plants":       {}
+        }
+
+    # ── Plants: from UserCompanyAccess for all matched companies ─────────────
     all_accesses = (
         db.query(user_models.UserCompanyAccess)
         .filter(
             user_models.UserCompanyAccess.user_id == user_id,
-            user_models.UserCompanyAccess.company_id.in_(primary_company_ids),
+            user_models.UserCompanyAccess.company_id.in_(all_company_ids),
         )
         .all()
-    ) if primary_company_ids else []
-
-    # Build company → plants map (company identity from primary rows, plants from all rows)
-    company_map: dict[int, dict] = {}
-    for acc in primary_accesses:
-        cid = acc.company_id
-        if cid not in company_map:
-            company = db.query(models.Company).filter(models.Company.id == cid).first()
-            if not company:
-                continue
-            company_map[cid] = {
-                "id":           company.id,
-                "company_name": company.company_name,
-                "company_code": company.company_code,
-                "plants":       {}
-            }
-
+    )
     for acc in all_accesses:
         cid = acc.company_id
         if cid not in company_map:
-            continue  # only care about primary companies
+            continue
         if acc.plant_id:
             pid = acc.plant_id
             if pid not in company_map[cid]["plants"]:
@@ -120,7 +140,7 @@ def get_user_companies_plants(user_id: int, db: Session = Depends(get_db)):
                         plant_code=getattr(plant, "plant_code", None)
                     )
 
-    # Serialise to response schema
+    # ── Serialise to response schema ──────────────────────────────────────────
     result = []
     for entry in company_map.values():
         result.append(CompanyWithPlantsOption(
