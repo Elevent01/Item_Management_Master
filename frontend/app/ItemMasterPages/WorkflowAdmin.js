@@ -60,21 +60,33 @@ export default function WorkflowAdmin() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [tRes, rRes, dRes, dgRes, cRes] = await Promise.all([
+      // Step 1: load templates + companies in parallel
+      const [tRes, cRes] = await Promise.all([
         fetch(`${API_BASE}/workflow/templates/`),
-        fetch(`${API_BASE}/roles`),
-        fetch(`${API_BASE}/departments`),
-        fetch(`${API_BASE}/designations`),
         fetch(`${API_BASE}/companies`),
       ]);
-      const [tData, rData, dData, dgData, cData] = await Promise.all([
-        tRes.json(), rRes.json(), dRes.json(), dgRes.json(), cRes.json()
-      ]);
+      const [tData, cData] = await Promise.all([tRes.json(), cRes.json()]);
       setTemplates(Array.isArray(tData) ? tData : []);
-      setRoles(Array.isArray(rData) ? rData : []);
-      setDepts(Array.isArray(dData) ? dData : []);
-      setDesgs(Array.isArray(dgData) ? dgData : []);
-      setCompanies(Array.isArray(cData) ? (cData[0]?.data || cData) : []);
+      const compList = Array.isArray(cData) ? (cData[0]?.data || cData) : [];
+      setCompanies(compList);
+
+      // Step 2: load roles/departments/designations via rbac-options
+      // Merge across all companies so approver dropdowns are fully populated
+      if (compList.length > 0) {
+        const rbacResults = await Promise.all(
+          compList.map(c => fetch(`${API_BASE}/companies/${c.id}/rbac-options`).then(r => r.json()).catch(() => null))
+        );
+        const rolesMap = {}, deptsMap = {}, desgsMap = {};
+        rbacResults.forEach(res => {
+          if (!res) return;
+          (res.roles        || []).forEach(r => { rolesMap[r.id] = r; });
+          (res.departments  || []).forEach(d => { deptsMap[d.id] = d; });
+          (res.designations || []).forEach(d => { desgsMap[d.id] = d; });
+        });
+        setRoles(Object.values(rolesMap));
+        setDepts(Object.values(deptsMap));
+        setDesgs(Object.values(desgsMap));
+      }
     } catch { showToast('Failed to load data', 'error'); }
     finally { setLoading(false); }
   }, []);
