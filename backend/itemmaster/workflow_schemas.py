@@ -114,12 +114,16 @@ class WorkflowTemplateCreate(BaseModel):
     name:        str
     description: Optional[str] = None
     company_id:  Optional[int] = None
+    entity_page: Optional[str] = None   # frontend page path e.g. "item-code-creation-req"
+    created_by:  Optional[int] = None   # user_id of admin creating the template
     steps:       List[WorkflowStepCreate] = []
 
 class WorkflowTemplateUpdate(BaseModel):
     name:        Optional[str] = None
     description: Optional[str] = None
     company_id:  Optional[int] = None
+    entity_page: Optional[str] = None
+    updated_by:  Optional[int] = None
     is_active:   Optional[bool] = None
 
 class WorkflowTemplateResponse(BaseModel):
@@ -129,10 +133,30 @@ class WorkflowTemplateResponse(BaseModel):
     description: Optional[str] = None
     is_active:   bool
     company_id:  Optional[int] = None
+    entity_page: Optional[str] = None
     company:     Optional[CompanyBrief] = None
+    creator:     Optional[UserBrief] = None
+    updater:     Optional[UserBrief] = None
     steps:       List[WorkflowStepResponse] = []
     created_at:  Optional[datetime] = None
     updated_at:  Optional[datetime] = None
+    class Config: from_attributes = True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  WORKFLOW PAGE REGISTRY
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WorkflowPageRegistryResponse(BaseModel):
+    id:           int
+    entity_page:  str
+    page_name:    Optional[str] = None
+    template_id:  int
+    template:     Optional[WorkflowTemplateResponse] = None
+    created_by:   Optional[int] = None
+    creator:      Optional[UserBrief] = None
+    created_at:   Optional[datetime] = None
+    is_active:    bool
     class Config: from_attributes = True
 
 
