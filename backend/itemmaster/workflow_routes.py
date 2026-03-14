@@ -52,7 +52,7 @@ from user import user_models as umodels         # User, UserCompanyAccess
 from itemmaster.workflow_models import (
     WorkflowTemplate, WorkflowStep, WorkflowStepApprover,
     WorkflowInstance, WorkflowStepInstance, WorkflowAction,
-    WorkflowNotification,
+    WorkflowNotification, WorkflowPageRegistry,
     WorkflowStatusEnum, StepStatusEnum, ActionTypeEnum, ApprovalTypeEnum,
 )
 from itemmaster.workflow_schemas import (
@@ -63,6 +63,7 @@ from itemmaster.workflow_schemas import (
     WorkflowActionCreate, WorkflowActionResponse,
     NotificationCreate, NotificationResponse,
     InboxItem, RequestTimeline, TimelineStep,
+    WorkflowPageRegistryResponse,
 )
 
 router = APIRouter()
@@ -86,6 +87,8 @@ def _load_template(db: Session, template_id: int) -> WorkflowTemplate:
             .joinedload(WorkflowStep.approvers)
             .joinedload(WorkflowStepApprover.designation),
             joinedload(WorkflowTemplate.company),
+            joinedload(WorkflowTemplate.creator),
+            joinedload(WorkflowTemplate.updater),
         )
         .filter(WorkflowTemplate.id == template_id)
         .first()
@@ -231,9 +234,22 @@ def create_template(payload: WorkflowTemplateCreate, db: Session = Depends(get_d
         name=payload.name,
         description=payload.description,
         company_id=payload.company_id,
+        entity_page=payload.entity_page or None,
+        created_by=payload.created_by or None,
     )
     db.add(tmpl)
     db.flush()
+
+    # Insert page registry row (audit trail)
+    if payload.entity_page:
+        reg = WorkflowPageRegistry(
+            entity_page=payload.entity_page,
+            page_name=payload.name,
+            template_id=tmpl.id,
+            created_by=payload.created_by or None,
+            is_active=True,
+        )
+        db.add(reg)
 
     for step_data in sorted(payload.steps, key=lambda s: s.step_order):
         step = WorkflowStep(
@@ -291,10 +307,27 @@ def update_template(template_id: int, payload: WorkflowTemplateUpdate, db: Sessi
     tmpl = db.query(WorkflowTemplate).filter(WorkflowTemplate.id == template_id).first()
     if not tmpl:
         raise HTTPException(404, "Template not found")
-    for field in ("name", "description", "company_id", "is_active"):
+    old_page = tmpl.entity_page
+    for field in ("name", "description", "company_id", "is_active", "entity_page", "updated_by"):
         v = getattr(payload, field, None)
         if v is not None:
             setattr(tmpl, field, v)
+
+    # If entity_page changed, deactivate old registry rows + insert new one
+    new_page = getattr(payload, "entity_page", None)
+    if new_page and new_page != old_page:
+        db.query(WorkflowPageRegistry).filter(
+            WorkflowPageRegistry.template_id == template_id,
+            WorkflowPageRegistry.is_active == True,
+        ).update({"is_active": False})
+        db.add(WorkflowPageRegistry(
+            entity_page=new_page,
+            page_name=tmpl.name,
+            template_id=template_id,
+            created_by=getattr(payload, "updated_by", None),
+            is_active=True,
+        ))
+
     db.commit()
     return _load_template(db, template_id)
 
@@ -439,6 +472,69 @@ def delete_notification(notif_id: int, db: Session = Depends(get_db)):
     db.delete(n)
     db.commit()
     return {"message": f"Notification {notif_id} removed"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PAGE REGISTRY — audit endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/workflow/page-registry/",
+    response_model=List[WorkflowPageRegistryResponse],
+    summary="List all page → template registry entries (audit)"
+)
+def list_page_registry(
+    entity_page: Optional[str] = Query(None, description="Filter by page path"),
+    is_active:   Optional[bool] = Query(None, description="Filter by active status"),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns the full audit history of which template was configured for which page.
+    is_active=True  → only the current active mapping per page.
+    is_active=False → only superseded (historical) entries.
+    Omit is_active  → full history.
+    """
+    q = (
+        db.query(WorkflowPageRegistry)
+        .options(
+            joinedload(WorkflowPageRegistry.template),
+            joinedload(WorkflowPageRegistry.creator),
+        )
+        .order_by(WorkflowPageRegistry.created_at.desc())
+    )
+    if entity_page:
+        q = q.filter(WorkflowPageRegistry.entity_page == entity_page)
+    if is_active is not None:
+        q = q.filter(WorkflowPageRegistry.is_active == is_active)
+    return q.all()
+
+
+@router.get(
+    "/workflow/page-registry/{entity_page}",
+    response_model=WorkflowPageRegistryResponse,
+    summary="Get active template registry entry for a specific page"
+)
+def get_page_registry(entity_page: str, db: Session = Depends(get_db)):
+    """
+    Returns the currently active template configured for the given page path.
+    Raises 404 if no template has been configured for that page yet.
+    """
+    reg = (
+        db.query(WorkflowPageRegistry)
+        .options(
+            joinedload(WorkflowPageRegistry.template),
+            joinedload(WorkflowPageRegistry.creator),
+        )
+        .filter(
+            WorkflowPageRegistry.entity_page == entity_page,
+            WorkflowPageRegistry.is_active == True,
+        )
+        .order_by(WorkflowPageRegistry.created_at.desc())
+        .first()
+    )
+    if not reg:
+        raise HTTPException(404, f"No active workflow template configured for page '{entity_page}'")
+    return reg
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
