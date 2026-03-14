@@ -47,7 +47,12 @@ const discoverAllConfigs = () => {
           const baseName = configName.replace(/Links$/, '');
 
           // Create Master name: 'abc' → 'AbcMaster'
-          const masterName = baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Master';
+          // 🔥 FIX: Agar baseName already 'Master' pe khatam hota hai (e.g. 'adminMaster'),
+          // toh dobara 'Master' mat lagao — warna 'AdminMasterMaster' ban jaata hai
+          const capitalizedBase = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+          const masterName = capitalizedBase.endsWith('Master')
+            ? capitalizedBase
+            : capitalizedBase + 'Master';
 
           // Create path: 'abc' → 'icon-abc'
           const pathName = baseName
@@ -73,23 +78,14 @@ const discoverAllConfigs = () => {
             console.log(`  ⚠️  [${index + 1}/${keys.length}] ${masterName}: ${links.length} links, component missing (will auto-generate)`);
           }
 
-          // 🔥 DEDUP: Skip if an icon with the same name or path already exists
-          const alreadyRegistered = icons.find(
-            i => i.name === masterName || i.path === `icon-${pathName}`
-          );
-          if (alreadyRegistered) {
-            console.log(`  ⚠️  [DEDUP] Skipping duplicate: ${masterName} (already registered from ${alreadyRegistered.configName})`);
-            skipped_count++;
-          } else {
-            icons.push({
-              name: masterName,
-              path: `icon-${pathName}`,
-              displayName: displayName,
-              links: links,
-              component: component,
-              configName: configName
-            });
-          }
+          icons.push({
+            name: masterName,
+            path: `icon-${pathName}`,
+            displayName: displayName,
+            links: links,
+            component: component,
+            configName: configName
+          });
 
         } else if (links && Array.isArray(links) && links.length === 0) {
           console.log(`  ℹ️  [${index + 1}/${keys.length}] ${configName}: Empty config (0 links)`);
