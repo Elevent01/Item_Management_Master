@@ -154,6 +154,30 @@ export default function LeftMenuPannelWithPageAccess() {
         designationId: primaryAccess.designation?.id
       });
 
+      // ✅ FIX: Check sessionStorage first to avoid double API call
+      const cachedMenu = sessionStorage.getItem('userMenu');
+      if (cachedMenu) {
+        console.log('✅ [VIEWER] Menu found in sessionStorage, skipping API call');
+        const menuJson = JSON.parse(cachedMenu);
+        if (menuJson.menu && menuJson.menu.length > 0) {
+          setMenuData(menuJson);
+          const allIds = new Set();
+          const collectIds = (pages) => {
+            pages.forEach(page => {
+              if (page.children && page.children.length > 0) {
+                allIds.add(page.id);
+                collectIds(page.children);
+              }
+            });
+          };
+          collectIds(menuJson.menu);
+          setExpandedCategories(allIds);
+          setLoading(false);
+          console.log('✅ [VIEWER] Menu loaded from cache with', menuJson.total_pages, 'pages');
+          return;
+        }
+      }
+
       const menuUrl = `${API_BASE}/rbac/users/${user.id}/accessible-menu?company_id=${primaryCompanyId}`;
       console.log('📡 [VIEWER] Fetching menu from:', menuUrl);
 
