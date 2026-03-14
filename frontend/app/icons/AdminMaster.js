@@ -94,43 +94,7 @@ export default function AdminMaster() {
         })}
       </div>
 
-      {/* List Layout - Sidebar style */}
-      <div style={{ marginTop: "40px" }}>
-        <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#333", marginBottom: "16px" }}>
-          Quick Access (List View)
-        </h2>
-        <div style={{ background: "#fff", borderRadius: "8px", border: "1px solid #e0e0e0", overflow: "hidden" }}>
-          {adminMasterLinks.map((item, index) => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={`list-${item.name}`}
-                onClick={() => handleItemClick(item)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "12px 16px",
-                  borderBottom: index < adminMasterLinks.length - 1 ? "1px solid #f0f0f0" : "none",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#f8f9fa";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                }}
-              >
-                <Icon size={18} color="#0066cc" />
-                <span style={{ fontSize: "14px", fontWeight: "500", color: "#333" }}>
-                  {item.name}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+
     </div>
   );
 }
