@@ -81,7 +81,9 @@ export default function LeftPanel() {
         ]);
 
         setFilteredAdminLinks(filteredAdmin);
-        setFilteredIconPages(filteredIcons);
+        // 🔥 FIX: AdminMaster upar hardcoded section se already show hota hai,
+        // isliye iconPages loop mein se hatao — warna 2 baar dikhega
+        setFilteredIconPages(filteredIcons.filter(p => p.name !== 'AdminMaster'));
         console.log('✅ Filtered Admin Links:', filteredAdmin.length);
         console.log('✅ Filtered Icon Pages:', filteredIcons.length);
         
