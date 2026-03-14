@@ -153,7 +153,10 @@ const ItemCodeCreationReq = () => {
 
   // ── form state ────────────────────────────────────────────────────────────
   const userDepartment  = getUserDepartment();
-  const userDepartments = getUserDepartments();
+  // Departments for currently selected company from dept-access API
+  const activeDepts  = form.company_id ? (deptAccessMap[form.company_id] || []) : [];
+  // Map to LOV format { code, name }
+  const userDepartments = activeDepts.map(d => ({ code: String(d.id), name: d.department_name }));
   const isSingleDept    = userDepartments.length <= 1;
 
   const emptyForm = {
@@ -170,6 +173,8 @@ const ItemCodeCreationReq = () => {
   const [companyOptions, setCompanyOptions] = useState([]);   // [{id, company_name, company_code, plants:[…]}]
   const [plantOptions, setPlantOptions]     = useState([]);   // plants of selected company
   const [optionsLoading, setOptionsLoading] = useState(false);
+  // dept-access map: { [company_id]: [{id, department_name}] }
+  const [deptAccessMap, setDeptAccessMap]   = useState({});
 
   // ── LOV modals ────────────────────────────────────────────────────────────
   const [modal, setModal] = useState(null);   // 'company' | 'plant' | 'itemType' | 'department'
@@ -224,29 +229,51 @@ const ItemCodeCreationReq = () => {
     setListLoading(false);
   }, []);
 
-  // ── load company+plant options for the logged-in user ────────────────────
+  // ── load company+plant options + dept-access for the logged-in user ────────
   const loadCompanyOptions = useCallback(async () => {
     if (!user?.id) return;
     setOptionsLoading(true);
     try {
-      const res  = await fetch(`${API_BASE}/item-creation-req/user/${user.id}/companies-plants`);
-      const data = await res.json();
-      setCompanyOptions(Array.isArray(data) ? data : []);
-    } catch { setCompanyOptions([]); }
+      const [cpRes, daRes] = await Promise.all([
+        fetch(`${API_BASE}/item-creation-req/user/${user.id}/companies-plants`),
+        fetch(`${API_BASE}/item-creation-req/user/${user.id}/dept-access`),
+      ]);
+      const cpData = await cpRes.json();
+      const daData = await daRes.json();
+      setCompanyOptions(Array.isArray(cpData) ? cpData : []);
+      // Build map: { company_id: [{id, department_name}] }
+      const map = {};
+      if (Array.isArray(daData)) {
+        daData.forEach(entry => {
+          if (entry.company_id && Array.isArray(entry.departments)) {
+            map[entry.company_id] = entry.departments;
+          }
+        });
+      }
+      setDeptAccessMap(map);
+    } catch { setCompanyOptions([]); setDeptAccessMap({}); }
     setOptionsLoading(false);
   }, [user?.id]);
 
   useEffect(() => { loadRecords(); loadCompanyOptions(); }, [loadRecords, loadCompanyOptions]);
 
-  // ── when company changes → update plant list ──────────────────────────────
+  // ── when company changes → update plant list + reset dept if not in new company ──
   useEffect(() => {
     if (form.company_id) {
       const co = companyOptions.find(c => c.id === form.company_id);
       setPlantOptions(co ? co.plants : []);
+      // If current department is not in new company's dept-access list, reset it
+      const newDepts = deptAccessMap[form.company_id] || [];
+      if (newDepts.length > 0 && form.department) {
+        const stillValid = newDepts.some(d => d.department_name === form.department);
+        if (!stillValid) setForm(f => ({ ...f, department: newDepts.length === 1 ? newDepts[0].department_name : '' }));
+      } else if (newDepts.length === 1) {
+        setForm(f => ({ ...f, department: newDepts[0].department_name }));
+      }
     } else {
       setPlantOptions([]);
     }
-  }, [form.company_id, companyOptions]);
+  }, [form.company_id, companyOptions, deptAccessMap]);
 
   // ── auto-set company if user has access to only one company ───────────────
   useEffect(() => {
