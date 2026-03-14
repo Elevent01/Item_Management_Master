@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { adminworkflowlinks } from '../config/adminworkflowlinks.js';
+import { getAccessiblePages } from '../utils/rbacCache';
 import {
   Plus, Edit2, Trash2, ChevronDown, ChevronRight,
   Save, X, RefreshCw, CheckCircle, AlertCircle,
@@ -49,6 +50,7 @@ export default function WorkflowAdmin() {
 
   // page selection
   const [selectedPage, setSelectedPage] = useState(null);  // { name, path } from adminworkflowlinks
+  const [accessiblePaths, setAccessiblePaths] = useState(null);  // null = loading, Set = ready
 
   // modals
   const [tmplModal, setTmplModal]   = useState(null);  // null | 'create' | {id, ...}
@@ -64,14 +66,24 @@ export default function WorkflowAdmin() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
+      // Same API as UserDeptAccessPage for companies
+      const userId = user?.id;
+      const compUrl = userId
+        ? `${API_BASE}/user-dept-access/companies?current_user_id=${userId}`
+        : `${API_BASE}/user-dept-access/companies`;
+
       const [tRes, cRes] = await Promise.all([
         fetch(`${API_BASE}/workflow/templates/`),
-        fetch(`${API_BASE}/companies`),
+        fetch(compUrl),
       ]);
       const [tData, cData] = await Promise.all([tRes.json(), cRes.json()]);
       setTemplates(Array.isArray(tData) ? tData : []);
-      const compList = Array.isArray(cData) ? (cData[0]?.data || cData) : [];
+
+      // cData = [{ id, company_name, company_code, user_count }]
+      const compList = Array.isArray(cData) ? cData : [];
       setCompanies(compList);
+
+      // Load roles/depts/desgs from user's companies via rbac-options
       if (compList.length > 0) {
         const rbacResults = await Promise.all(
           compList.map(c => fetch(`${API_BASE}/companies/${c.id}/rbac-options`).then(r => r.json()).catch(() => null))
@@ -92,6 +104,16 @@ export default function WorkflowAdmin() {
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // ── Load user's accessible pages from RBAC ─────────────────────────────
+  useEffect(() => {
+    getAccessiblePages()
+      .then(pages => {
+        const paths = new Set(pages.map(p => p.page_url?.split('/').pop()).filter(Boolean));
+        setAccessiblePaths(paths);
+      })
+      .catch(() => setAccessiblePaths(new Set()));
+  }, []);
 
   // ── Template CRUD ──────────────────────────────────────────────────────────
   const saveTemplate = async (data) => {
@@ -143,18 +165,14 @@ export default function WorkflowAdmin() {
     loadAll();
   };
 
-  // ─── Accessible pages for current user ──────────────────────────────────
+  // ─── Accessible pages for current user (filtered via rbacCache) ──────────
   const accessiblePages = React.useMemo(() => {
-    if (!user) return [];
-    const userPaths = new Set(
-      (user.accesses || []).flatMap(a =>
-        (a.accessible_pages || []).map(p => p.page_url?.replace(/^.*\//, ''))
-      )
-    );
-    // If user has no page access info, show all pages (fallback)
-    if (userPaths.size === 0) return adminworkflowlinks;
-    return adminworkflowlinks.filter(pg => userPaths.has(pg.path));
-  }, [user]);
+    // Still loading — return empty so page doesn't flash
+    if (accessiblePaths === null) return [];
+    // If no access data at all (e.g. super-admin fallback) — show all
+    if (accessiblePaths.size === 0) return adminworkflowlinks;
+    return adminworkflowlinks.filter(pg => accessiblePaths.has(pg.path));
+  }, [accessiblePaths]);
 
   // ─── Header ─────────────────────────────────────────────────────────────
   const renderHeader = () => (
@@ -186,7 +204,7 @@ export default function WorkflowAdmin() {
           style={{ flex: 1, maxWidth: 320, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 11, color: '#111', background: '#fff' }}
         >
           <option value="">— Select a page first —</option>
-          {adminworkflowlinks.map(pg => {
+          {accessiblePages.map(pg => {
             const hasTmpl = templates.some(t => t.entity_page === pg.path || t.code.includes(pg.path.toUpperCase().replace(/-/g,'_')));
             return (
               <option key={pg.path} value={pg.path}>
@@ -340,6 +358,32 @@ export default function WorkflowAdmin() {
     if (!aprModal) return null;
     return <ApproverModal aprModal={aprModal} roles={roles} departments={departments} designations={designations} companies={companies} saveApprover={saveApprover} showToast={showToast} setAprModal={setAprModal} loadAll={loadAll} />;
   };
+
+  // ── Access guard ─────────────────────────────────────────────────────────
+  if (accessiblePaths === null) {
+    return (
+      <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 11, background: '#f8fafc', minHeight: '100vh' }}>
+        {renderHeader()}
+        <div style={{ textAlign: 'center', padding: 60, color: '#9ca3af' }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>
+          Checking access…
+        </div>
+      </div>
+    );
+  }
+
+  if (accessiblePages.length === 0) {
+    return (
+      <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 11, background: '#f8fafc', minHeight: '100vh' }}>
+        {renderHeader()}
+        <div style={{ textAlign: 'center', padding: 60, color: '#9ca3af' }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>🔒</div>
+          <p style={{ fontSize: 12 }}>You do not have access to any workflow pages.</p>
+          <p style={{ fontSize: 10 }}>Contact your administrator to request access.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 11, background: '#f8fafc', minHeight: '100vh' }}>
