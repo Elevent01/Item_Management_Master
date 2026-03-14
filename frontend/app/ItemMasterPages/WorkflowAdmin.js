@@ -295,7 +295,9 @@ function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplM
     <Field label="Name *">
       <input value={form.name} onChange={e => {
         const name = e.target.value;
-        const autoCode = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const slug = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 12) || 'TEMPLATE';
+        const uid  = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const autoCode = `WRKFLW-${slug}-${uid}`;
         setForm(f => ({ ...f, name, code: autoCode }));
       }} style={inp()} />
     </Field>
