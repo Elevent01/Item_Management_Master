@@ -39,6 +39,24 @@ const getUserDepartment = () => {
   } catch { return ''; }
 };
 
+// Extract all unique departments from user's accesses
+const getUserDepartments = () => {
+  try {
+    const d = JSON.parse(sessionStorage.getItem('userData') || '{}');
+    const user = d?.user;
+    if (!user) return [];
+    const seen = new Set();
+    return (user.accesses || [])
+      .map(a => a.department)
+      .filter(dep => dep && (dep.name || dep.department_name))
+      .reduce((acc, dep) => {
+        const name = dep.name || dep.department_name;
+        if (!seen.has(name)) { seen.add(name); acc.push({ code: dep.code || dep.id || name, name }); }
+        return acc;
+      }, []);
+  } catch { return []; }
+};
+
 // ─── LOV Modal (reused pattern from existing pages) ───────────────────────
 const LOVModal = ({ title, items, onSelect, onClose, loading = false }) => {
   const [search, setSearch] = useState('');
@@ -134,7 +152,9 @@ const ItemCodeCreationReq = () => {
   const [searchTerm, setSearchTerm]   = useState('');
 
   // ── form state ────────────────────────────────────────────────────────────
-  const userDepartment = getUserDepartment();
+  const userDepartment  = getUserDepartment();
+  const userDepartments = getUserDepartments();
+  const isSingleDept    = userDepartments.length <= 1;
 
   const emptyForm = {
     item_name: '', item_description: '', item_short_name: '',
@@ -693,16 +713,24 @@ const ItemCodeCreationReq = () => {
             {inp('Item Name', 'item_name', { required: true })}
             {inp('Item Short Name', 'item_short_name', { required: true })}
             {lovField('Item Type', 'item_type', 'itemType', true)}
-            {/* Department – auto-filled from user session, readonly */}
+            {/* Department – auto if single, LOV popup if multiple */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <label style={{ fontSize: 11, color: '#000', minWidth: 130 }}>Department <span style={{ color: '#dc2626' }}>*</span></label>
               <div style={{ position: 'relative', flex: 1 }}>
-                <input
-                  readOnly
-                  value={form.department}
-                  placeholder="Department (auto from profile)"
-                  style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: '#fff', cursor: 'default' }}
+                <input readOnly value={form.department} placeholder="Select Department"
+                  onClick={() => { if (!isSingleDept) setModal('department'); }}
+                  style={{ width: '100%', padding: '4px 45px 4px 6px', border: '1px solid #ccc', fontSize: 11, borderRadius: 2, color: '#000', background: '#fff', cursor: isSingleDept ? 'default' : 'pointer' }}
                 />
+                {form.department && !isSingleDept && (
+                  <button onClick={() => setForm(f => ({ ...f, department: '' }))}
+                    style={{ position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                    <X size={12} color="#ef4444" />
+                  </button>
+                )}
+                <button onClick={() => { if (!isSingleDept) setModal('department'); }}
+                  style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: isSingleDept ? 'default' : 'pointer' }}>
+                  <Search size={13} color="#999" />
+                </button>
               </div>
             </div>
             {inp('Required Date', 'required_date', { type: 'date', required: true })}
@@ -797,7 +825,7 @@ const ItemCodeCreationReq = () => {
 
     if (modal === 'department') {
       return (
-        <LOVModal title="SELECT DEPARTMENT" items={deptList}
+        <LOVModal title="SELECT DEPARTMENT" items={userDepartments}
           onSelect={item => { setForm(f => ({ ...f, department: item.name })); setModal(null); }}
           onClose={() => setModal(null)} />
       );
