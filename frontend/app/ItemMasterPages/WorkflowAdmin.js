@@ -60,33 +60,21 @@ export default function WorkflowAdmin() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      // Step 1: load templates + companies in parallel
-      const [tRes, cRes] = await Promise.all([
+      const [tRes, rRes, dRes, dgRes, cRes] = await Promise.all([
         fetch(`${API_BASE}/workflow/templates/`),
+        fetch(`${API_BASE}/roles`),
+        fetch(`${API_BASE}/departments`),
+        fetch(`${API_BASE}/designations`),
         fetch(`${API_BASE}/companies`),
       ]);
-      const [tData, cData] = await Promise.all([tRes.json(), cRes.json()]);
+      const [tData, rData, dData, dgData, cData] = await Promise.all([
+        tRes.json(), rRes.json(), dRes.json(), dgRes.json(), cRes.json()
+      ]);
       setTemplates(Array.isArray(tData) ? tData : []);
-      const compList = Array.isArray(cData) ? (cData[0]?.data || cData) : [];
-      setCompanies(compList);
-
-      // Step 2: load roles/departments/designations via rbac-options
-      // Merge across all companies so approver dropdowns are fully populated
-      if (compList.length > 0) {
-        const rbacResults = await Promise.all(
-          compList.map(c => fetch(`${API_BASE}/companies/${c.id}/rbac-options`).then(r => r.json()).catch(() => null))
-        );
-        const rolesMap = {}, deptsMap = {}, desgsMap = {};
-        rbacResults.forEach(res => {
-          if (!res) return;
-          (res.roles        || []).forEach(r => { rolesMap[r.id] = r; });
-          (res.departments  || []).forEach(d => { deptsMap[d.id] = d; });
-          (res.designations || []).forEach(d => { desgsMap[d.id] = d; });
-        });
-        setRoles(Object.values(rolesMap));
-        setDepts(Object.values(deptsMap));
-        setDesgs(Object.values(desgsMap));
-      }
+      setRoles(Array.isArray(rData) ? rData : []);
+      setDepts(Array.isArray(dData) ? dData : []);
+      setDesgs(Array.isArray(dgData) ? dgData : []);
+      setCompanies(Array.isArray(cData) ? (cData[0]?.data || cData) : []);
     } catch { showToast('Failed to load data', 'error'); }
     finally { setLoading(false); }
   }, []);
@@ -258,148 +246,17 @@ export default function WorkflowAdmin() {
   // ─── MODALS ──────────────────────────────────────────────────────────────
   const renderTemplateModal = () => {
     if (!tmplModal) return null;
-    const isEdit = typeof tmplModal === 'object' && tmplModal.id;
-    const [form, setForm] = React.useState({
-      code: tmplModal?.code || '',
-      name: tmplModal?.name || '',
-      description: tmplModal?.description || '',
-      company_id: tmplModal?.company_id || '',
-    });
-
-    const onSave = async () => {
-      try {
-        const data = { ...form, company_id: form.company_id || null };
-        if (isEdit) data.id = tmplModal.id;
-        await saveTemplate(data);
-        showToast(isEdit ? 'Template updated' : 'Template created');
-        setTmplModal(null);
-        loadAll();
-      } catch (e) { showToast(e.message, 'error'); }
-    };
-
-    return <Modal title={isEdit ? 'Edit Template' : 'New Workflow Template'} onClose={() => setTmplModal(null)}>
-      <Field label="Code *" hint="e.g. ITEM_CREATION">
-        <input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} disabled={isEdit} style={inp(isEdit)} />
-      </Field>
-      <Field label="Name *">
-        <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp()} />
-      </Field>
-      <Field label="Description">
-        <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp(), resize: 'vertical' }} />
-      </Field>
-      <Field label="Company (optional)">
-        <select value={form.company_id} onChange={e => setForm(f => ({ ...f, company_id: e.target.value }))} style={inp()}>
-          <option value="">— Global (all companies) —</option>
-          {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
-        </select>
-      </Field>
-      <ModalFooter onCancel={() => setTmplModal(null)} onSave={onSave} />
-    </Modal>;
+    return <TemplateModal tmplModal={tmplModal} companies={companies} saveTemplate={saveTemplate} showToast={showToast} setTmplModal={setTmplModal} loadAll={loadAll} />;
   };
 
   const renderStepModal = () => {
     if (!stepModal) return null;
-    const isEdit = !!stepModal.step_order;
-    const [form, setForm] = React.useState({
-      template_id:      stepModal.template_id || stepModal.template_id,
-      step_order:       stepModal.step_order || '',
-      step_name:        stepModal.step_name || '',
-      step_description: stepModal.step_description || '',
-      approval_type:    stepModal.approval_type || 'ANY',
-      sla_hours:        stepModal.sla_hours || 0,
-      condition_field:  stepModal.condition_field || '',
-      condition_value:  stepModal.condition_value || '',
-      condition_op:     stepModal.condition_op || 'eq',
-    });
-
-    const onSave = async () => {
-      try {
-        const data = { ...form, step_order: parseInt(form.step_order), sla_hours: parseInt(form.sla_hours) || 0 };
-        if (isEdit) data.id = stepModal.id;
-        else data.template_id = stepModal.template_id;
-        await saveStep(data);
-        showToast(isEdit ? 'Step updated' : 'Step added');
-        setStepModal(null);
-        loadAll();
-      } catch (e) { showToast(e.message, 'error'); }
-    };
-
-    return <Modal title={isEdit ? 'Edit Step' : 'Add Step'} onClose={() => setStepModal(null)}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <Field label="Step Order *">
-          <input type="number" value={form.step_order} onChange={e => setForm(f => ({ ...f, step_order: e.target.value }))} style={inp()} />
-        </Field>
-        <Field label="Approval Type">
-          <select value={form.approval_type} onChange={e => setForm(f => ({ ...f, approval_type: e.target.value }))} style={inp()}>
-            <option value="ANY">ANY (any one approver)</option>
-            <option value="ALL">ALL (everyone must approve)</option>
-          </select>
-        </Field>
-      </div>
-      <Field label="Step Name *">
-        <input value={form.step_name} onChange={e => setForm(f => ({ ...f, step_name: e.target.value }))} style={inp()} />
-      </Field>
-      <Field label="Description">
-        <textarea value={form.step_description} onChange={e => setForm(f => ({ ...f, step_description: e.target.value }))} rows={2} style={{ ...inp(), resize: 'vertical' }} />
-      </Field>
-      <Field label="SLA Hours (0 = no limit)">
-        <input type="number" value={form.sla_hours} onChange={e => setForm(f => ({ ...f, sla_hours: e.target.value }))} style={inp()} />
-      </Field>
-      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: 8, marginTop: 4 }}>
-        <p style={{ fontSize: 10, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>⚡ Conditional Skip (optional)</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr', gap: 6 }}>
-          <Field label="Field name"><input placeholder="e.g. item_type" value={form.condition_field} onChange={e => setForm(f => ({ ...f, condition_field: e.target.value }))} style={inp()} /></Field>
-          <Field label="Op"><select value={form.condition_op} onChange={e => setForm(f => ({ ...f, condition_op: e.target.value }))} style={inp()}>
-            <option value="eq">=</option><option value="neq">≠</option><option value="gt">&gt;</option><option value="lt">&lt;</option>
-          </select></Field>
-          <Field label="Value"><input placeholder="e.g. Capital" value={form.condition_value} onChange={e => setForm(f => ({ ...f, condition_value: e.target.value }))} style={inp()} /></Field>
-        </div>
-      </div>
-      <ModalFooter onCancel={() => setStepModal(null)} onSave={onSave} />
-    </Modal>;
+    return <StepModal stepModal={stepModal} saveStep={saveStep} showToast={showToast} setStepModal={setStepModal} loadAll={loadAll} />;
   };
 
   const renderApproverModal = () => {
     if (!aprModal) return null;
-    const [form, setForm] = React.useState({ role_id: '', department_id: '', designation_id: '', company_id: '' });
-
-    const onSave = async () => {
-      try {
-        await saveApprover({ step_id: aprModal.step_id, role_id: form.role_id || null, department_id: form.department_id || null, designation_id: form.designation_id || null, company_id: form.company_id || null });
-        showToast('Approver added');
-        setAprModal(null);
-        loadAll();
-      } catch (e) { showToast(e.message, 'error'); }
-    };
-
-    return <Modal title="Add Step Approver" onClose={() => setAprModal(null)}>
-      <p style={{ fontSize: 10, color: '#6b7280', marginBottom: 8 }}>Leave blank = wildcard (matches any). Fill only what you want to restrict.</p>
-      <Field label="Role">
-        <select value={form.role_id} onChange={e => setForm(f => ({ ...f, role_id: e.target.value }))} style={inp()}>
-          <option value="">— Any Role —</option>
-          {roles.map(r => <option key={r.id} value={r.id}>{r.role_name}</option>)}
-        </select>
-      </Field>
-      <Field label="Department">
-        <select value={form.department_id} onChange={e => setForm(f => ({ ...f, department_id: e.target.value }))} style={inp()}>
-          <option value="">— Any Department —</option>
-          {departments.map(d => <option key={d.id} value={d.id}>{d.department_name}</option>)}
-        </select>
-      </Field>
-      <Field label="Designation">
-        <select value={form.designation_id} onChange={e => setForm(f => ({ ...f, designation_id: e.target.value }))} style={inp()}>
-          <option value="">— Any Designation —</option>
-          {designations.map(d => <option key={d.id} value={d.id}>{d.designation_name}</option>)}
-        </select>
-      </Field>
-      <Field label="Company (optional)">
-        <select value={form.company_id} onChange={e => setForm(f => ({ ...f, company_id: e.target.value }))} style={inp()}>
-          <option value="">— Any Company —</option>
-          {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
-        </select>
-      </Field>
-      <ModalFooter onCancel={() => setAprModal(null)} onSave={onSave} saveLabel="Add Approver" />
-    </Modal>;
+    return <ApproverModal aprModal={aprModal} roles={roles} departments={departments} designations={designations} companies={companies} saveApprover={saveApprover} showToast={showToast} setAprModal={setAprModal} loadAll={loadAll} />;
   };
 
   return (
@@ -412,6 +269,145 @@ export default function WorkflowAdmin() {
       {renderApproverModal()}
     </div>
   );
+}
+
+// ─── Modal Sub-Components (hooks must be at top-level of a component) ─────────
+
+function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplModal, loadAll }) {
+  const isEdit = typeof tmplModal === 'object' && tmplModal.id;
+  const [form, setForm] = React.useState({
+    code:        tmplModal?.code        || '',
+    name:        tmplModal?.name        || '',
+    description: tmplModal?.description || '',
+    company_id:  tmplModal?.company_id  || '',
+  });
+  const onSave = async () => {
+    try {
+      const data = { ...form, company_id: form.company_id || null };
+      if (isEdit) data.id = tmplModal.id;
+      await saveTemplate(data);
+      showToast(isEdit ? 'Template updated' : 'Template created');
+      setTmplModal(null);
+      loadAll();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  return <Modal title={isEdit ? 'Edit Template' : 'New Workflow Template'} onClose={() => setTmplModal(null)}>
+    <Field label="Code *" hint="e.g. ITEM_CREATION">
+      <input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} disabled={isEdit} style={inp(isEdit)} />
+    </Field>
+    <Field label="Name *">
+      <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp()} />
+    </Field>
+    <Field label="Description">
+      <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp(), resize: 'vertical' }} />
+    </Field>
+    <Field label="Company (optional)">
+      <select value={form.company_id} onChange={e => setForm(f => ({ ...f, company_id: e.target.value }))} style={inp()}>
+        <option value="">— Global (all companies) —</option>
+        {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+      </select>
+    </Field>
+    <ModalFooter onCancel={() => setTmplModal(null)} onSave={onSave} />
+  </Modal>;
+}
+
+function StepModal({ stepModal, saveStep, showToast, setStepModal, loadAll }) {
+  const isEdit = !!stepModal.step_order;
+  const [form, setForm] = React.useState({
+    template_id:      stepModal.template_id || '',
+    step_order:       stepModal.step_order  || '',
+    step_name:        stepModal.step_name   || '',
+    step_description: stepModal.step_description || '',
+    approval_type:    stepModal.approval_type    || 'ANY',
+    sla_hours:        stepModal.sla_hours        || 0,
+    condition_field:  stepModal.condition_field  || '',
+    condition_value:  stepModal.condition_value  || '',
+    condition_op:     stepModal.condition_op     || 'eq',
+  });
+  const onSave = async () => {
+    try {
+      const data = { ...form, step_order: parseInt(form.step_order), sla_hours: parseInt(form.sla_hours) || 0 };
+      if (isEdit) data.id = stepModal.id;
+      else data.template_id = stepModal.template_id;
+      await saveStep(data);
+      showToast(isEdit ? 'Step updated' : 'Step added');
+      setStepModal(null);
+      loadAll();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  return <Modal title={isEdit ? 'Edit Step' : 'Add Step'} onClose={() => setStepModal(null)}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <Field label="Step Order *">
+        <input type="number" value={form.step_order} onChange={e => setForm(f => ({ ...f, step_order: e.target.value }))} style={inp()} />
+      </Field>
+      <Field label="Approval Type">
+        <select value={form.approval_type} onChange={e => setForm(f => ({ ...f, approval_type: e.target.value }))} style={inp()}>
+          <option value="ANY">ANY (any one approver)</option>
+          <option value="ALL">ALL (everyone must approve)</option>
+        </select>
+      </Field>
+    </div>
+    <Field label="Step Name *">
+      <input value={form.step_name} onChange={e => setForm(f => ({ ...f, step_name: e.target.value }))} style={inp()} />
+    </Field>
+    <Field label="Description">
+      <textarea value={form.step_description} onChange={e => setForm(f => ({ ...f, step_description: e.target.value }))} rows={2} style={{ ...inp(), resize: 'vertical' }} />
+    </Field>
+    <Field label="SLA Hours (0 = no limit)">
+      <input type="number" value={form.sla_hours} onChange={e => setForm(f => ({ ...f, sla_hours: e.target.value }))} style={inp()} />
+    </Field>
+    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: 8, marginTop: 4 }}>
+      <p style={{ fontSize: 10, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>⚡ Conditional Skip (optional)</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr', gap: 6 }}>
+        <Field label="Field name"><input placeholder="e.g. item_type" value={form.condition_field} onChange={e => setForm(f => ({ ...f, condition_field: e.target.value }))} style={inp()} /></Field>
+        <Field label="Op"><select value={form.condition_op} onChange={e => setForm(f => ({ ...f, condition_op: e.target.value }))} style={inp()}>
+          <option value="eq">=</option><option value="neq">≠</option><option value="gt">&gt;</option><option value="lt">&lt;</option>
+        </select></Field>
+        <Field label="Value"><input placeholder="e.g. Capital" value={form.condition_value} onChange={e => setForm(f => ({ ...f, condition_value: e.target.value }))} style={inp()} /></Field>
+      </div>
+    </div>
+    <ModalFooter onCancel={() => setStepModal(null)} onSave={onSave} />
+  </Modal>;
+}
+
+function ApproverModal({ aprModal, roles, departments, designations, companies, saveApprover, showToast, setAprModal, loadAll }) {
+  const [form, setForm] = React.useState({ role_id: '', department_id: '', designation_id: '', company_id: '' });
+  const onSave = async () => {
+    try {
+      await saveApprover({ step_id: aprModal.step_id, role_id: form.role_id || null, department_id: form.department_id || null, designation_id: form.designation_id || null, company_id: form.company_id || null });
+      showToast('Approver added');
+      setAprModal(null);
+      loadAll();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  return <Modal title="Add Step Approver" onClose={() => setAprModal(null)}>
+    <p style={{ fontSize: 10, color: '#6b7280', marginBottom: 8 }}>Leave blank = wildcard (matches any). Fill only what you want to restrict.</p>
+    <Field label="Role">
+      <select value={form.role_id} onChange={e => setForm(f => ({ ...f, role_id: e.target.value }))} style={inp()}>
+        <option value="">— Any Role —</option>
+        {roles.map(r => <option key={r.id} value={r.id}>{r.role_name}</option>)}
+      </select>
+    </Field>
+    <Field label="Department">
+      <select value={form.department_id} onChange={e => setForm(f => ({ ...f, department_id: e.target.value }))} style={inp()}>
+        <option value="">— Any Department —</option>
+        {departments.map(d => <option key={d.id} value={d.id}>{d.department_name}</option>)}
+      </select>
+    </Field>
+    <Field label="Designation">
+      <select value={form.designation_id} onChange={e => setForm(f => ({ ...f, designation_id: e.target.value }))} style={inp()}>
+        <option value="">— Any Designation —</option>
+        {designations.map(d => <option key={d.id} value={d.id}>{d.designation_name}</option>)}
+      </select>
+    </Field>
+    <Field label="Company (optional)">
+      <select value={form.company_id} onChange={e => setForm(f => ({ ...f, company_id: e.target.value }))} style={inp()}>
+        <option value="">— Any Company —</option>
+        {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+      </select>
+    </Field>
+    <ModalFooter onCancel={() => setAprModal(null)} onSave={onSave} saveLabel="Add Approver" />
+  </Modal>;
 }
 
 // ─── Tiny shared components ──────────────────────────────────────────────────
