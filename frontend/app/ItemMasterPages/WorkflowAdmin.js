@@ -37,7 +37,6 @@ const Toast = ({ toast }) => {
 };
 
 export default function WorkflowAdmin() {
-  const user = getSession();
 
   const [templates, setTemplates]   = useState([]);
   const [roles, setRoles]           = useState([]);
@@ -47,6 +46,10 @@ export default function WorkflowAdmin() {
   const [expanded, setExpanded]     = useState({});    // template id → bool
   const [toast, setToast]           = useState(null);
   const [loading, setLoading]       = useState(false);
+
+  // ── Session (same pattern as UserDeptAccessPage) ───────────────────────────
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [sessionReady, setSessionReady]   = useState(false);
 
   // page selection
   const [selectedPage, setSelectedPage] = useState(null);  // { name, path } from adminworkflowlinks
@@ -62,12 +65,22 @@ export default function WorkflowAdmin() {
     setTimeout(() => setToast(null), 2800);
   };
 
-  // ── Load data ──────────────────────────────────────────────────────────────
-  const loadAll = useCallback(async () => {
+  // ── Read session once on mount ─────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const storedData = sessionStorage.getItem('userData');
+      if (storedData) {
+        const userData = JSON.parse(storedData);
+        if (userData?.user?.id) setCurrentUserId(userData.user.id);
+      }
+    } catch (e) { console.error('Session error:', e); }
+    setSessionReady(true);
+  }, []);
+
+  // ── Load data (only after session is ready) ────────────────────────────────
+  const loadAll = useCallback(async (userId) => {
     setLoading(true);
     try {
-      // Same API as UserDeptAccessPage for companies
-      const userId = user?.id;
       const compUrl = userId
         ? `${API_BASE}/user-dept-access/companies?current_user_id=${userId}`
         : `${API_BASE}/user-dept-access/companies`;
@@ -103,7 +116,11 @@ export default function WorkflowAdmin() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  // Wait for sessionReady before firing loadAll — same guard as UserDeptAccessPage
+  useEffect(() => {
+    if (!sessionReady) return;
+    reloadAll();
+  }, [sessionReady, currentUserId, loadAll]);
 
   // ── Load user's accessible pages from RBAC ─────────────────────────────
   useEffect(() => {
@@ -129,7 +146,7 @@ export default function WorkflowAdmin() {
     if (!window.confirm('Deactivate this template?')) return;
     await fetch(`${API_BASE}/workflow/templates/${id}`, { method: 'DELETE' });
     showToast('Template deactivated');
-    loadAll();
+    reloadAll();
   };
 
   // ── Step CRUD ──────────────────────────────────────────────────────────────
@@ -146,7 +163,7 @@ export default function WorkflowAdmin() {
     if (!window.confirm('Delete this step?')) return;
     await fetch(`${API_BASE}/workflow/steps/${id}`, { method: 'DELETE' });
     showToast('Step deleted');
-    loadAll();
+    reloadAll();
   };
 
   // ── Approver CRUD ──────────────────────────────────────────────────────────
@@ -162,7 +179,7 @@ export default function WorkflowAdmin() {
     if (!window.confirm('Remove this approver?')) return;
     await fetch(`${API_BASE}/workflow/approvers/${id}`, { method: 'DELETE' });
     showToast('Approver removed');
-    loadAll();
+    reloadAll();
   };
 
   // ─── Accessible pages for current user (filtered via rbacCache) ──────────
@@ -180,7 +197,7 @@ export default function WorkflowAdmin() {
       <div style={{ background: 'linear-gradient(to right, #374151, #60a5fa)', color: '#fff', padding: '8px 12px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>⚙️ Workflow Setup — Templates, Steps & Approvers</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={loadAll} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button onClick={reloadAll} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
             <RefreshCw size={11} /> Refresh
           </button>
           {selectedPage && (
@@ -343,20 +360,23 @@ export default function WorkflowAdmin() {
     );
   };
 
+  // Bound reload — child components call this without needing currentUserId
+  const reloadAll = useCallback(() => loadAll(currentUserId), [loadAll, currentUserId]);
+
   // ─── MODALS ──────────────────────────────────────────────────────────────
   const renderTemplateModal = () => {
     if (!tmplModal) return null;
-    return <TemplateModal tmplModal={tmplModal} companies={companies} saveTemplate={saveTemplate} showToast={showToast} setTmplModal={setTmplModal} loadAll={loadAll} selectedPage={selectedPage} />;
+    return <TemplateModal tmplModal={tmplModal} companies={companies} saveTemplate={saveTemplate} showToast={showToast} setTmplModal={setTmplModal} loadAll={reloadAll} selectedPage={selectedPage} />;
   };
 
   const renderStepModal = () => {
     if (!stepModal) return null;
-    return <StepModal stepModal={stepModal} saveStep={saveStep} showToast={showToast} setStepModal={setStepModal} loadAll={loadAll} />;
+    return <StepModal stepModal={stepModal} saveStep={saveStep} showToast={showToast} setStepModal={setStepModal} loadAll={reloadAll} />;
   };
 
   const renderApproverModal = () => {
     if (!aprModal) return null;
-    return <ApproverModal aprModal={aprModal} roles={roles} departments={departments} designations={designations} companies={companies} saveApprover={saveApprover} showToast={showToast} setAprModal={setAprModal} loadAll={loadAll} />;
+    return <ApproverModal aprModal={aprModal} roles={roles} departments={departments} designations={designations} companies={companies} saveApprover={saveApprover} showToast={showToast} setAprModal={setAprModal} loadAll={reloadAll} />;
   };
 
   // ── Access guard ─────────────────────────────────────────────────────────
@@ -424,7 +444,7 @@ function TemplateModal({ tmplModal, companies, saveTemplate, showToast, setTmplM
       await saveTemplate(data);
       showToast(isEdit ? 'Template updated' : 'Template created');
       setTmplModal(null);
-      loadAll();
+      reloadAll();
     } catch (e) { showToast(e.message, 'error'); }
   };
   return <Modal title={isEdit ? 'Edit Template' : 'New Workflow Template'} onClose={() => setTmplModal(null)}>
@@ -484,7 +504,7 @@ function StepModal({ stepModal, saveStep, showToast, setStepModal, loadAll }) {
       await saveStep(data);
       showToast(isEdit ? 'Step updated' : 'Step added');
       setStepModal(null);
-      loadAll();
+      reloadAll();
     } catch (e) { showToast(e.message, 'error'); }
   };
   return <Modal title={isEdit ? 'Edit Step' : 'Add Step'} onClose={() => setStepModal(null)}>
@@ -529,7 +549,7 @@ function ApproverModal({ aprModal, roles, departments, designations, companies, 
       await saveApprover({ step_id: aprModal.step_id, role_id: form.role_id || null, department_id: form.department_id || null, designation_id: form.designation_id || null, company_id: form.company_id || null });
       showToast('Approver added');
       setAprModal(null);
-      loadAll();
+      reloadAll();
     } catch (e) { showToast(e.message, 'error'); }
   };
   return <Modal title="Add Step Approver" onClose={() => setAprModal(null)}>
